@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <link rel="icon" href="/favicon.ico">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#1f2937">
+    <title>VideoChat</title>
+    
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              primary: '#3b82f6',
+              dark: '#1f2937'
+            }
+          }
+        }
+      }
+    </script>
+    
+    <!-- Config placeholder for Go server injection -->
+    <script>window.__CONFIG__=null;</script>
+  </head>
+  <body class="bg-gray-900 text-white min-h-screen">
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,27 @@
+# ================================================
+# Root .gitignore - Global protections
+# ================================================
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor directories and files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Private development files
+/private/
+
+# Environment files (anywhere in repo)
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+logs/

@@ -1,0 +1,39 @@
+# ================================================
+# Go Server .gitignore
+# ================================================
+
+# Binaries
+videochat
+videochat.exe
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Go build artifacts
+*.o
+*.a
+
+# Test binary
+*.test
+
+# Coverage
+coverage.out
+coverage.html
+*.cov
+
+# Dependency directories (usually not needed with go.mod)
+vendor/
+
+# Config with potential secrets
+config.json
+config.local.json
+*.local.json
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
