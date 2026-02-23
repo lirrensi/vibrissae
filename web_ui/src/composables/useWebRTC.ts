@@ -77,8 +77,18 @@ export function useWebRTC(
   async function startLocalStream(videoDeviceId?: string, audioDeviceId?: string) {
     try {
       const constraints: MediaStreamConstraints = {
-        video: videoDeviceId ? { deviceId: { exact: videoDeviceId } } : true,
-        audio: audioDeviceId ? { deviceId: { exact: audioDeviceId } } : true
+        video: {
+          width: { ideal: 1920, max: 1920 },
+          height: { ideal: 1080, max: 1080 },
+          frameRate: { ideal: 30, max: 60 },
+          ...(videoDeviceId ? { deviceId: { exact: videoDeviceId } } : {})
+        },
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          ...(audioDeviceId ? { deviceId: { exact: audioDeviceId } } : {})
+        }
       }
       
       const stream = await navigator.mediaDevices.getUserMedia(constraints)
@@ -347,7 +357,12 @@ export function useWebRTC(
     const oldTrack = store.localStream?.getVideoTracks()[0]
     
     const newStream = await navigator.mediaDevices.getUserMedia({
-      video: { deviceId: { exact: deviceId } }
+      video: {
+        width: { ideal: 1920, max: 1920 },
+        height: { ideal: 1080, max: 1080 },
+        frameRate: { ideal: 30, max: 60 },
+        deviceId: { exact: deviceId }
+      }
     })
     const newTrack = newStream.getVideoTracks()[0]
     if (!newTrack) return

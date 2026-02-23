@@ -5,6 +5,7 @@ const props = defineProps<{
   stream: MediaStream | null | undefined
   isLocal: boolean
   label: string
+  isSpeaking?: boolean
 }>()
 
 const videoRef = ref<HTMLVideoElement | null>(null)
@@ -23,7 +24,12 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="relative bg-gray-800 rounded-lg overflow-hidden aspect-video">
+  <div 
+    :class="[
+      'relative bg-gray-800 rounded-lg overflow-hidden aspect-video transition-all duration-200',
+      isSpeaking ? 'ring-4 ring-green-500 ring-opacity-75' : ''
+    ]"
+  >
     <video
       ref="videoRef"
       autoplay

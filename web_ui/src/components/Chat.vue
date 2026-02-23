@@ -5,6 +5,7 @@ import type { ChatMessage } from '@/composables/useChat'
 const props = defineProps<{
   messages: ChatMessage[]
   isOpen: boolean
+  localParticipantId: string | null
 }>()
 
 const emit = defineEmits<{
@@ -14,6 +15,21 @@ const emit = defineEmits<{
 
 const inputText = ref('')
 const messagesContainer = ref<HTMLElement | null>(null)
+
+function getParticipantColor(id: string): string {
+  // Generate a consistent color based on participant ID
+  const colors = [
+    'bg-blue-600', 'bg-green-600', 'bg-purple-600', 
+    'bg-pink-600', 'bg-yellow-600', 'bg-indigo-600',
+    'bg-red-600', 'bg-teal-600', 'bg-orange-600'
+  ]
+  let hash = 0
+  for (let i = 0; i < id.length; i++) {
+    hash = ((hash << 5) - hash) + id.charCodeAt(i)
+    hash = hash & hash
+  }
+  return colors[Math.abs(hash) % colors.length] ?? 'bg-blue-600'
+}
 
 function send() {
   if (!inputText.value.trim()) return
@@ -72,7 +88,14 @@ watch(() => props.messages.length, async () => {
             : 'bg-gray-700'
         ]"
       >
-        {{ msg.text }}
+        <!-- Sender indicator for remote messages -->
+        <div 
+          v-if="!msg.isLocal" 
+          :class="['text-xs font-medium mb-1 px-1.5 py-0.5 rounded inline-block', getParticipantColor(msg.from)]"
+        >
+          {{ msg.from.slice(0, 8) }}
+        </div>
+        <div>{{ msg.text }}</div>
       </div>
     </div>
     

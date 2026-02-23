@@ -1,11 +1,15 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { storeToRefs } from 'pinia'
 import { useRoomStore } from '@/stores/room'
 import { useSignaling } from '@/composables/useSignaling'
 import { useWebRTC } from '@/composables/useWebRTC'
 import { useDevices } from '@/composables/useDevices'
 import { useChat } from '@/composables/useChat'
+import { useAudioAnalyzer } from '@/composables/useAudioAnalyzer'
+import { useSpeakerDetection } from '@/composables/useSpeakerDetection'
+import { useDeafen } from '@/composables/useDeafen'
 import VideoGrid from '@/components/VideoGrid.vue'
 import Controls from '@/components/Controls.vue'
 import Chat from '@/components/Chat.vue'
@@ -15,6 +19,7 @@ import type { SignalingMessage, JoinAckPayload, PeerJoinedPayload } from '@/type
 const route = useRoute()
 const router = useRouter()
 const store = useRoomStore()
+const { localStream, participants, participantId } = storeToRefs(store)
 
 const roomId = route.params.id as string
 store.setRoom(roomId)
@@ -27,6 +32,9 @@ const signaling = useSignaling(roomId)
 const devices = useDevices()
 const webrtc = useWebRTC(roomId, signaling)
 const chat = useChat(webrtc)
+const audioAnalyzer = useAudioAnalyzer(localStream)
+const speakerDetection = useSpeakerDetection(participants)
+const deafen = useDeafen(participants)
 
 // Define message handler (now webrtc is available)
 function handleSignalingMessage(msg: SignalingMessage) {
@@ -156,9 +164,10 @@ function leave() {
       <!-- Call view -->
       <template v-else>
         <VideoGrid
-          :localStream="store.localStream"
-          :participants="store.participants"
-          :localParticipantId="store.participantId"
+          :localStream="localStream"
+          :participants="participants"
+          :localParticipantId="participantId"
+          :activeSpeaker="speakerDetection.activeSpeaker.value"
         />
         
         <!-- Participant warning -->
@@ -176,14 +185,17 @@ function leave() {
       v-if="!isLoading && !error"
       :isMuted="webrtc.isMuted.value"
       :isVideoOff="webrtc.isVideoOff.value"
+      :isDeafened="deafen.isDeafened.value"
+      :micVolume="audioAnalyzer.volume.value"
       :cameras="devices.cameras.value"
       :microphones="devices.microphones.value"
       :selectedCamera="devices.selectedCamera.value"
       :selectedMicrophone="devices.selectedMicrophone.value"
       @toggleAudio="webrtc.toggleAudio"
       @toggleVideo="webrtc.toggleVideo"
-      @selectCamera="devices.setCamera"
-      @selectMicrophone="devices.setMicrophone"
+      @toggleDeafen="deafen.toggleDeafen"
+      @selectCamera="(id) => { devices.setCamera(id); webrtc.switchVideoDevice(id); }"
+      @selectMicrophone="(id) => { devices.setMicrophone(id); webrtc.switchAudioDevice(id); }"
       @leave="leave"
     />
     
@@ -192,6 +204,7 @@ function leave() {
       v-if="!isLoading && !error"
       :messages="chat.messages.value"
       :isOpen="chat.isOpen.value"
+      :localParticipantId="participantId"
       @send="chat.send"
       @toggle="chat.toggle"
     />

@@ -7,6 +7,7 @@ const props = defineProps<{
   localStream: MediaStream | null
   participants: Map<string, Participant>
   localParticipantId: string | null
+  activeSpeaker: string | null
 }>()
 
 const participantList = computed(() => Array.from(props.participants.values()))
@@ -27,6 +28,7 @@ const gridClass = computed(() => {
         :stream="localStream"
         :isLocal="true"
         :label="'You'"
+        :isSpeaking="localParticipantId === activeSpeaker"
       />
       
       <!-- Remote videos -->
@@ -36,6 +38,7 @@ const gridClass = computed(() => {
         :stream="p.stream"
         :isLocal="false"
         :label="p.id?.slice(0, 8) || 'Unknown'"
+        :isSpeaking="p.id === activeSpeaker"
       />
     </div>
   </div>

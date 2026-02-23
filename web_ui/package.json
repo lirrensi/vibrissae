@@ -14,7 +14,8 @@
         "lint": "run-s lint:*",
         "lint:oxlint": "oxlint . --fix",
         "lint:eslint": "eslint . --fix --cache",
-        "format": "oxfmt src/"
+        "format": "oxfmt src/",
+        "build:server": "npm run build"
     },
     "dependencies": {
         "pinia": "^3.0.4",
