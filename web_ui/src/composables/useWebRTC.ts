@@ -54,8 +54,11 @@ export function useWebRTC(
     
     // Built-in TURN
     if (appConfig.turn?.enabled && appConfig.turnCredentials) {
+      // Extract just the hostname (remove any port)
+      const baseUrl = appConfig.baseUrl || window.location.host
+      const hostname = baseUrl.replace(/^https?:\/\//, '').split(':')[0]
       config.iceServers!.push({
-        urls: `turn:${appConfig.baseUrl.replace(/^https?:\/\//, '')}:${appConfig.turn.port}`,
+        urls: `turn:${hostname}:${appConfig.turn.port}`,
         username: appConfig.turnCredentials.username,
         credential: appConfig.turnCredentials.password
       })
@@ -107,6 +110,7 @@ export function useWebRTC(
     // Handle remote stream
     pc.ontrack = (event) => {
       const stream = event.streams[0]
+      console.log(`[WebRTC] ontrack fired for ${participantId}, stream:`, stream?.id, 'tracks:', stream?.getTracks().length)
       if (!stream) return
       
       store.updateParticipantStream(participantId, stream)
@@ -115,6 +119,7 @@ export function useWebRTC(
       const videoTrack = stream.getVideoTracks()[0]
       const audioTrack = stream.getAudioTracks()[0]
       const p = store.participants.get(participantId)
+      console.log(`[WebRTC] Participant ${participantId} in store:`, !!p, 'videoTrack:', !!videoTrack, 'audioTrack:', !!audioTrack)
       if (p) {
         p.videoEnabled = videoTrack?.enabled ?? false
         p.audioEnabled = audioTrack?.enabled ?? false
@@ -169,37 +174,44 @@ export function useWebRTC(
   }
   
   async function handleOffer(participantId: string, offer: RTCSessionDescriptionInit) {
+    console.log(`[WebRTC] handleOffer called for: ${participantId}`)
     let pc = peerConnections.value.get(participantId)
     if (!pc) {
+      console.log(`[WebRTC] Creating new peer connection for: ${participantId}`)
       pc = createPeerConnection(participantId, false)
     }
     
     // Race condition guard: don't overwrite existing remote description
     if (pc.remoteDescription) {
-      console.warn(`Ignoring offer from ${participantId} - remote description already set`)
+      console.warn(`[WebRTC] Ignoring offer from ${participantId} - remote description already set`)
       return
     }
     
     try {
+      console.log(`[WebRTC] Setting remote description for: ${participantId}`)
       await withTimeout(
         pc.setRemoteDescription(new RTCSessionDescription(offer)),
         WEBRTC_TIMEOUT,
         'Timeout setting remote description'
       )
+      console.log(`[WebRTC] Creating answer for: ${participantId}`)
       const answer = await withTimeout(
         pc.createAnswer(),
         WEBRTC_TIMEOUT,
         'Timeout creating answer'
       )
+      console.log(`[WebRTC] Setting local description for: ${participantId}`)
       await withTimeout(
         pc.setLocalDescription(answer),
         WEBRTC_TIMEOUT,
         'Timeout setting local description'
       )
+      console.log(`[WebRTC] Sending answer to: ${participantId}`)
       signaling.send('answer', participantId, { sdp: answer.sdp, type: answer.type })
       signaling.setP2PEstablished(true)
+      console.log(`[WebRTC] Answer sent to: ${participantId}`)
     } catch (err) {
-      console.error('handleOffer failed:', err)
+      console.error('[WebRTC] handleOffer failed:', err)
       store.updateParticipantIceState(participantId, 'failed')
     }
   }
@@ -228,6 +240,7 @@ export function useWebRTC(
   }
   
   async function initiateConnection(participantId: string) {
+    console.log(`[WebRTC] Initiating connection to: ${participantId}`)
     const pc = createPeerConnection(participantId, true)
     try {
       const offer = await withTimeout(
@@ -240,6 +253,7 @@ export function useWebRTC(
         WEBRTC_TIMEOUT,
         'Timeout setting local description'
       )
+      console.log(`[WebRTC] Sending offer to: ${participantId}`)
       signaling.send('offer', participantId, { sdp: offer.sdp, type: offer.type })
     } catch (err) {
       console.error('initiateConnection failed:', err)

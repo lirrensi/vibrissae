@@ -323,7 +323,7 @@ func TestRoomManager_AddParticipant(t *testing.T) {
 	defer server.Close()
 	defer conn.Close()
 
-	room := rm.AddParticipant("room-1", "participant-1", conn)
+	room, _ := rm.AddParticipant("room-1", "participant-1", conn)
 
 	if room == nil {
 		t.Fatal("AddParticipant should return the room")

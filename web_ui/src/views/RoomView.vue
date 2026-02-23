@@ -10,6 +10,7 @@ import VideoGrid from '@/components/VideoGrid.vue'
 import Controls from '@/components/Controls.vue'
 import Chat from '@/components/Chat.vue'
 import ConnectionStatus from '@/components/ConnectionStatus.vue'
+import type { SignalingMessage, JoinAckPayload, PeerJoinedPayload } from '@/types/signaling'
 
 const route = useRoute()
 const router = useRouter()
@@ -18,13 +19,78 @@ const store = useRoomStore()
 const roomId = route.params.id as string
 store.setRoom(roomId)
 
+const isLoading = ref(true)
+const error = ref<string | null>(null)
+
+// Create composables
 const signaling = useSignaling(roomId)
 const devices = useDevices()
 const webrtc = useWebRTC(roomId, signaling)
 const chat = useChat(webrtc)
 
-const isLoading = ref(true)
-const error = ref<string | null>(null)
+// Define message handler (now webrtc is available)
+function handleSignalingMessage(msg: SignalingMessage) {
+  console.log('[RoomView] Received message:', msg.type, msg)
+  switch (msg.type) {
+    case 'join-ack': {
+      isLoading.value = false
+      const payload = msg.payload as JoinAckPayload
+      console.log('[RoomView] Join-ack with existing peers:', payload.existingPeers, 'initiatorId:', payload.initiatorId)
+      
+      // Store who the initiator is
+      store.setInitiatorId(payload.initiatorId)
+      
+      // Add existing peers to store (so ontrack can find them)
+      if (payload.existingPeers && payload.existingPeers.length > 0) {
+        for (const peerId of payload.existingPeers) {
+          console.log(`[RoomView] Adding existing peer to store: ${peerId}`)
+          store.addParticipant(peerId)
+          
+          // Only initiate if WE are the initiator
+          if (payload.initiatorId === store.participantId) {
+            console.log(`[RoomView] We are initiator, connecting to existing peer: ${peerId}`)
+            webrtc.initiateConnection(peerId)
+          }
+        }
+      }
+      break
+    }
+    case 'peer-joined': {
+      const payload = msg.payload as PeerJoinedPayload
+      store.addParticipant(payload.participantId)
+      
+      // Only initiate if WE are the initiator for this new peer
+      if (payload.initiatorId === store.participantId) {
+        console.log(`[RoomView] We are initiator, connecting to new peer: ${payload.participantId}`)
+        webrtc.initiateConnection(payload.participantId)
+      } else {
+        console.log(`[RoomView] Waiting for offer from initiator: ${payload.initiatorId}`)
+      }
+      break
+    }
+    case 'offer': {
+      console.log(`[RoomView] Received offer from: ${msg.from}`)
+      webrtc.handleOffer(msg.from!, msg.payload as RTCSessionDescriptionInit).catch(err => {
+        console.error('[RoomView] handleOffer error:', err)
+      })
+      break
+    }
+    case 'answer': {
+      console.log(`[RoomView] Received answer from: ${msg.from}`)
+      webrtc.handleAnswer(msg.from!, msg.payload as RTCSessionDescriptionInit).catch(err => {
+        console.error('[RoomView] handleAnswer error:', err)
+      })
+      break
+    }
+    case 'ice-candidate': {
+      webrtc.handleIceCandidate(msg.from!, msg.payload as RTCIceCandidateInit)
+      break
+    }
+    case 'error':
+      error.value = (msg.payload as { message: string }).message
+      break
+  }
+}
 
 onMounted(async () => {
   try {
@@ -32,33 +98,11 @@ onMounted(async () => {
     await webrtc.startLocalStream()
     await devices.getInitialDevices()
     
+    // Register message handler BEFORE connecting
+    signaling.setMessageHandler(handleSignalingMessage)
+    
     // Connect to signaling
     signaling.connect()
-    
-    // Handle signaling messages for WebRTC
-    signaling.onMessage(async (msg) => {
-      switch (msg.type) {
-        case 'join-ack':
-          isLoading.value = false
-          break
-        case 'peer-joined':
-          // We initiate the connection (joiner)
-          webrtc.initiateConnection(msg.from!)
-          break
-        case 'offer':
-          await webrtc.handleOffer(msg.from!, msg.payload as RTCSessionDescriptionInit)
-          break
-        case 'answer':
-          await webrtc.handleAnswer(msg.from!, msg.payload as RTCSessionDescriptionInit)
-          break
-        case 'ice-candidate':
-          webrtc.handleIceCandidate(msg.from!, msg.payload as RTCIceCandidateInit)
-          break
-        case 'error':
-          error.value = (msg.payload as { message: string }).message
-          break
-      }
-    })
   } catch (err) {
     error.value = 'Failed to access camera/microphone'
     isLoading.value = false

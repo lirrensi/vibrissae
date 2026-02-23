@@ -83,11 +83,11 @@ func (h *SignalingHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Add participant to room
-	room := h.rooms.AddParticipant(roomID, participantID, conn)
-	log.Printf("Participant %s joined room %s (total: %d)", participantID, roomID, room.ParticipantCount())
+	room, isCreator := h.rooms.AddParticipant(roomID, participantID, conn)
+	log.Printf("Participant %s joined room %s (total: %d, isCreator: %v)", participantID, roomID, room.ParticipantCount(), isCreator)
 
 	// Send join acknowledgment
-	h.sendJoinAck(conn, participantID, roomID, creds)
+	h.sendJoinAck(conn, participantID, roomID, creds, isCreator)
 
 	// Notify others in the room
 	h.broadcastPeerJoined(room, participantID)
@@ -153,14 +153,28 @@ func (h *SignalingHandler) sendMessage(conn *websocket.Conn, msg SignalingMessag
 	return conn.WriteMessage(websocket.TextMessage, data)
 }
 
-// sendJoinAck sends the join acknowledgment with participant ID and TURN credentials
-func (h *SignalingHandler) sendJoinAck(conn *websocket.Conn, participantID, roomID string, creds TurnCredentials) {
+// sendJoinAck sends the join acknowledgment with participant ID, TURN credentials, and initiator info
+func (h *SignalingHandler) sendJoinAck(conn *websocket.Conn, participantID, roomID string, creds TurnCredentials, isCreator bool) {
 	// Get existing participants
 	room := h.rooms.Get(roomID)
 	var existingPeers []string
+	var initiatorId string
+
 	if room != nil {
 		for _, p := range room.GetOtherParticipants(participantID) {
 			existingPeers = append(existingPeers, p.ID)
+		}
+
+		// Determine who should initiate connections
+		// If room was empty, this participant is the initiator (creator)
+		// Otherwise, the longest-connected existing participant initiates
+		if isCreator {
+			initiatorId = participantID
+		} else {
+			longest := room.GetLongestConnectedParticipant(participantID)
+			if longest != nil {
+				initiatorId = longest.ID
+			}
 		}
 	}
 
@@ -169,6 +183,7 @@ func (h *SignalingHandler) sendJoinAck(conn *websocket.Conn, participantID, room
 		"roomId":          roomID,
 		"turnCredentials": creds,
 		"existingPeers":   existingPeers,
+		"initiatorId":     initiatorId,
 	})
 
 	msg := SignalingMessage{
@@ -178,10 +193,18 @@ func (h *SignalingHandler) sendJoinAck(conn *websocket.Conn, participantID, room
 	h.sendMessage(conn, msg)
 }
 
-// broadcastPeerJoined notifies all participants about a new peer
+// broadcastPeerJoined notifies all participants about a new peer and who should initiate
 func (h *SignalingHandler) broadcastPeerJoined(room *Room, newParticipantID string) {
-	payload, _ := json.Marshal(map[string]string{
+	// Find who should initiate connection to the new peer (longest connected)
+	initiator := room.GetLongestConnectedParticipant(newParticipantID)
+	initiatorId := ""
+	if initiator != nil {
+		initiatorId = initiator.ID
+	}
+
+	payload, _ := json.Marshal(map[string]interface{}{
 		"participantId": newParticipantID,
+		"initiatorId":   initiatorId,
 	})
 
 	msg := SignalingMessage{

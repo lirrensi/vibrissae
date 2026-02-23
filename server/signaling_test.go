@@ -629,7 +629,7 @@ func TestSendJoinAck_ExistingPeers(t *testing.T) {
 
 		// Call sendJoinAck
 		creds := TurnCredentials{}
-		handler.sendJoinAck(conn, "new-participant", "test-room", creds)
+		handler.sendJoinAck(conn, "new-participant", "test-room", creds, true)
 	}))
 	defer server.Close()
 

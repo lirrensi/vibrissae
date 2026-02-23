@@ -8,6 +8,7 @@ export const useRoomStore = defineStore('room', () => {
   const participants = ref<Map<string, Participant>>(new Map())
   const localStream = ref<MediaStream | null>(null)
   const localIceState = ref<RTCIceConnectionState | null>(null)
+  const initiatorId = ref<string | null>(null)
   
   const participantCount = computed(() => participants.value.size + 1)
   const showWarning = computed(() => participantCount.value >= 4)
@@ -44,7 +45,8 @@ export const useRoomStore = defineStore('room', () => {
   function updateParticipantStream(id: string, stream: MediaStream) {
     const p = participants.value.get(id)
     if (p) {
-      p.stream = stream
+      // Create new participant object for reactivity
+      participants.value.set(id, { ...p, stream })
     }
   }
   
@@ -63,12 +65,17 @@ export const useRoomStore = defineStore('room', () => {
     localStream.value = stream
   }
   
+  function setInitiatorId(id: string | null) {
+    initiatorId.value = id
+  }
+  
   function clear() {
     roomId.value = null
     participantId.value = null
     participants.value.clear()
     localStream.value = null
     localIceState.value = null
+    initiatorId.value = null
   }
   
   return {
@@ -77,6 +84,7 @@ export const useRoomStore = defineStore('room', () => {
     participants,
     localStream,
     localIceState,
+    initiatorId,
     participantCount,
     showWarning,
     hasConnectionFailure,
@@ -88,6 +96,7 @@ export const useRoomStore = defineStore('room', () => {
     updateParticipantIceState,
     setLocalIceState,
     setLocalStream,
+    setInitiatorId,
     clear
   }
 })

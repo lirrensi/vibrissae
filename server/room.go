@@ -32,11 +32,14 @@ func NewRoom(id string) *Room {
 }
 
 // AddParticipant adds a participant to the room
-func (r *Room) AddParticipant(p *Participant) {
+// Returns true if this participant is the first one (room creator)
+func (r *Room) AddParticipant(p *Participant) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	isFirst := len(r.Participants) == 0
 	r.Participants[p.ID] = p
 	r.LastActivity = time.Now()
+	return isFirst
 }
 
 // RemoveParticipant removes a participant from the room
@@ -83,6 +86,24 @@ func (r *Room) ParticipantCount() int {
 	return len(r.Participants)
 }
 
+// GetLongestConnectedParticipant returns the participant who joined earliest
+// (excluding the specified participant). Returns nil if no other participants exist.
+func (r *Room) GetLongestConnectedParticipant(excludeID string) *Participant {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var oldest *Participant
+	for id, p := range r.Participants {
+		if id == excludeID {
+			continue
+		}
+		if oldest == nil || p.JoinedAt.Before(oldest.JoinedAt) {
+			oldest = p
+		}
+	}
+	return oldest
+}
+
 // RoomManager manages all rooms with TTL-based cleanup
 type RoomManager struct {
 	rooms       sync.Map // map[string]*Room
@@ -126,15 +147,16 @@ func (rm *RoomManager) Get(roomID string) *Room {
 }
 
 // AddParticipant adds a participant to a room, creating the room if needed
-func (rm *RoomManager) AddParticipant(roomID, participantID string, conn *websocket.Conn) *Room {
+// Returns the room and whether this participant is the creator (first in room)
+func (rm *RoomManager) AddParticipant(roomID, participantID string, conn *websocket.Conn) (*Room, bool) {
 	room := rm.GetOrCreate(roomID)
 	participant := &Participant{
 		ID:       participantID,
 		Conn:     conn,
 		JoinedAt: time.Now(),
 	}
-	room.AddParticipant(participant)
-	return room
+	isCreator := room.AddParticipant(participant)
+	return room, isCreator
 }
 
 // RemoveParticipant removes a participant from a room

@@ -35,7 +35,7 @@ const gridClass = computed(() => {
         :key="p.id"
         :stream="p.stream"
         :isLocal="false"
-        :label="p.id.slice(0, 8)"
+        :label="p.id?.slice(0, 8) || 'Unknown'"
       />
     </div>
   </div>

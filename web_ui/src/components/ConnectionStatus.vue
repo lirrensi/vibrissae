@@ -25,7 +25,7 @@ const hasIceFailure = computed(() =>
 </script>
 
 <template>
-  <div class="flex items-center gap-2 text-sm flex-wrap">
+  <div class="flex items-center gap-2 text-sm flex-wrap" data-testid="connection-status">
     <!-- Signaling status -->
     <div class="flex items-center gap-1">
       <div

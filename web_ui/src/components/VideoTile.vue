@@ -30,6 +30,7 @@ onMounted(() => {
       playsinline
       :muted="isLocal"
       class="w-full h-full object-cover"
+      :data-testid="isLocal ? 'local-video' : 'remote-video'"
     />
     
     <!-- Label -->

@@ -1,0 +1,13 @@
+{
+  "port": 28080,
+  "base_url": "http://localhost:28080",
+  "room_ttl_minutes": 60,
+  "turn": {
+    "enabled": true,
+    "port": 23478,
+    "rate_limit_per_ip": 10,
+    "credential_ttl_minutes": 30,
+    "secret": ""
+  },
+  "turn_servers": []
+}

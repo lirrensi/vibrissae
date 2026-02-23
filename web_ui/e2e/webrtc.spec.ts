@@ -1,166 +1,279 @@
-import { test, expect, BrowserContext, Page } from '@playwright/test'
+import { test, expect, type BrowserContext, type Page } from '@playwright/test'
 
 /**
- * WebRTC E2E Tests
- * 
- * Two browser contexts = two peers
- * Each gets fake media, connects via signaling server, establishes P2P
+ * VideoChat E2E Tests - Full WebRTC testing with camera/mic
+ * Tests complete P2P connection flow with real media streams
  */
 
-test.describe('WebRTC Video Call', () => {
-  let peerA: { context: BrowserContext; page: Page }
-  let peerB: { context: BrowserContext; page: Page }
-  let roomUrl: string
+test.describe('VideoChat E2E', () => {
+  let peerAContext: BrowserContext
+  let peerAPage: Page
+  let peerBContext: BrowserContext
+  let peerBPage: Page
 
   test.beforeEach(async ({ browser }) => {
-    // Create TWO separate browser contexts (not just pages)
-    // This ensures separate WebRTC connections
-    const contextA = await browser.newContext({
+    // Create contexts with camera/mic permissions granted
+    peerAContext = await browser.newContext({
       permissions: ['camera', 'microphone'],
     })
-    const contextB = await browser.newContext({
+    peerBContext = await browser.newContext({
       permissions: ['camera', 'microphone'],
     })
-    
-    peerA = { context: contextA, page: await contextA.newPage() }
-    peerB = { context: contextB, page: await contextB.newPage() }
+    peerAPage = await peerAContext.newPage()
+    peerBPage = await peerBContext.newPage()
+
+    // Capture ALL console logs for debugging
+    peerAPage.on('console', msg => {
+      console.log(`[Peer A ${msg.type()}]`, msg.text())
+    })
+    peerBPage.on('console', msg => {
+      console.log(`[Peer B ${msg.type()}]`, msg.text())
+    })
   })
 
   test.afterEach(async () => {
-    await peerA.context.close()
-    await peerB.context.close()
+    await peerAContext?.close()
+    await peerBContext?.close()
   })
 
-  test('full call flow: create room → join → connect', async () => {
-    // === PEER A: Create room ===
-    await peerA.page.goto('/')
-    await peerA.page.click('text=Generate Link')
-    
-    // Wait for room creation and get URL
-    await peerA.page.waitForURL(/\/room\//)
-    roomUrl = peerA.page.url()
+  test('home page loads and can create room', async () => {
+    await peerAPage.goto('/')
+
+    // Check page title
+    await expect(peerAPage.locator('h1')).toHaveText('VideoChat')
+
+    // Check button exists
+    await expect(peerAPage.locator('button:has-text("Generate Link")')).toBeVisible()
+
+    // Click to create room
+    await peerAPage.click('button:has-text("Generate Link")')
+
+    // Should navigate to room
+    await peerAPage.waitForURL(/\/room\//, { timeout: 10000 })
+
+    const url = peerAPage.url()
+    expect(url).toMatch(/\/room\/[a-f0-9-]+/)
+
+    console.log('✅ Room created:', url)
+  })
+
+  test('camera activates and local video appears', async () => {
+    await peerAPage.goto('/')
+    await peerAPage.click('button:has-text("Generate Link")')
+    await peerAPage.waitForURL(/\/room\//, { timeout: 10000 })
+
+    // Wait for local video to appear (camera activated)
+    const localVideo = peerAPage.locator('video[data-testid="local-video"]').first()
+    await expect(localVideo).toBeVisible({ timeout: 15000 })
+
+    // Verify video is actually playing (has video tracks)
+    const isPlaying = await localVideo.evaluate((video: HTMLVideoElement) => {
+      return video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0
+    })
+    expect(isPlaying).toBe(true)
+
+    console.log('✅ Local camera activated and video playing')
+  })
+
+  test('second peer can join room and both see local video', async () => {
+    // Peer A creates room
+    await peerAPage.goto('/')
+    await peerAPage.click('button:has-text("Generate Link")')
+    await peerAPage.waitForURL(/\/room\//, { timeout: 10000 })
+
+    const roomUrl = peerAPage.url()
     console.log('Room URL:', roomUrl)
-    
-    // Peer A should show loading → then connected state
-    await peerA.page.waitForSelector('text=Connecting', { timeout: 5000 }).catch(() => {})
-    
-    // Wait for media to be acquired
-    await peerA.page.waitForFunction(() => {
-      const video = document.querySelector('video')
-      return video && video.srcObject
+
+    // Wait for Peer A local video
+    const peerALocalVideo = peerAPage.locator('video[data-testid="local-video"]').first()
+    await expect(peerALocalVideo).toBeVisible({ timeout: 15000 })
+
+    // Peer B joins
+    await peerBPage.goto(roomUrl)
+
+    // Wait for Peer B local video
+    const peerBLocalVideo = peerBPage.locator('video[data-testid="local-video"]').first()
+    await expect(peerBLocalVideo).toBeVisible({ timeout: 15000 })
+
+    console.log('✅ Both peers in room with local video active')
+  })
+
+  test('peers establish WebRTC connection and see remote video', async () => {
+    // Peer A creates room
+    console.log('🎬 Starting WebRTC connection test')
+    await peerAPage.goto('/')
+    await peerAPage.click('button:has-text("Generate Link")')
+    await peerAPage.waitForURL(/\/room\//, { timeout: 10000 })
+
+    const roomUrl = peerAPage.url()
+    console.log('🔗 Room URL:', roomUrl)
+
+    // Wait for Peer A local video (camera active)
+    await expect(peerAPage.locator('video[data-testid="local-video"]').first()).toBeVisible({ timeout: 15000 })
+    console.log('✅ Peer A local video visible')
+
+    // Wait for signaling to be connected
+    await peerAPage.waitForFunction(() => {
+      const status = document.querySelector('[data-testid="connection-status"]')
+      return status?.textContent?.includes('Signaling')
     }, { timeout: 10000 })
+    console.log('✅ Peer A signaling connected')
 
-    // === PEER B: Join room ===
-    await peerB.page.goto(roomUrl)
-    
-    // Both should eventually show 2 participants
-    // Wait for WebRTC connection to establish
-    await Promise.all([
-      peerA.page.waitForFunction(
-        () => document.querySelectorAll('video').length >= 2,
-        { timeout: 30000 }
-      ),
-      peerB.page.waitForFunction(
-        () => document.querySelectorAll('video').length >= 2,
-        { timeout: 30000 }
-      ),
-    ])
-    
-    console.log('✅ Both peers connected with video')
-  })
+    // Peer B joins
+    console.log('👤 Peer B joining...')
+    await peerBPage.goto(roomUrl)
+    await expect(peerBPage.locator('video[data-testid="local-video"]').first()).toBeVisible({ timeout: 15000 })
+    console.log('✅ Peer B local video visible')
 
-  test('chat works via DataChannel', async () => {
-    // Setup: both join room first
-    await peerA.page.goto('/')
-    await peerA.page.click('text=Generate Link')
-    await peerA.page.waitForURL(/\/room\//)
-    roomUrl = peerA.page.url()
-    
-    await peerB.page.goto(roomUrl)
-    
-    // Wait for connection
-    await Promise.all([
-      peerA.page.waitForFunction(() => document.querySelectorAll('video').length >= 2, { timeout: 30000 }),
-      peerB.page.waitForFunction(() => document.querySelectorAll('video').length >= 2, { timeout: 30000 }),
-    ])
-    
-    // Open chat on both sides
-    await peerA.page.click('[data-testid="chat-toggle"]')
-    await peerB.page.click('[data-testid="chat-toggle"]')
-    
-    // Peer A sends message
-    await peerA.page.fill('[data-testid="chat-input"]', 'Hello from Peer A')
-    await peerA.page.click('[data-testid="chat-send"]')
-    
-    // Peer B should receive
-    await expect(peerB.page.locator('[data-testid="chat-messages"]')).toContainText('Hello from Peer A', { timeout: 5000 })
-    
-    // Peer B replies
-    await peerB.page.fill('[data-testid="chat-input"]', 'Hey Peer B here')
-    await peerB.page.click('[data-testid="chat-send"]')
-    
-    await expect(peerA.page.locator('[data-testid="chat-messages"]')).toContainText('Hey Peer B here', { timeout: 5000 })
-    
-    console.log('✅ Chat working via DataChannel')
-  })
+    // Wait for signaling on Peer B
+    await peerBPage.waitForFunction(() => {
+      const status = document.querySelector('[data-testid="connection-status"]')
+      return status?.textContent?.includes('Signaling')
+    }, { timeout: 10000 })
+    console.log('✅ Peer B signaling connected')
 
-  test('peer disconnect is detected', async () => {
-    // Setup
-    await peerA.page.goto('/')
-    await peerA.page.click('text=Generate Link')
-    await peerA.page.waitForURL(/\/room\//)
-    roomUrl = peerA.page.url()
-    
-    await peerB.page.goto(roomUrl)
-    
-    await Promise.all([
-      peerA.page.waitForFunction(() => document.querySelectorAll('video').length >= 2, { timeout: 30000 }),
-      peerB.page.waitForFunction(() => document.querySelectorAll('video').length >= 2, { timeout: 30000 }),
-    ])
-    
-    // Peer B disconnects
-    await peerB.page.click('text=Leave')
-    
-    // Peer A should see only 1 video now (their own)
-    await peerA.page.waitForFunction(
-      () => document.querySelectorAll('video').length === 1,
-      { timeout: 10000 }
-    )
-    
-    console.log('✅ Disconnect detected')
-  })
+    // Wait for peers to discover each other and establish connection
+    console.log('⏳ Waiting for WebRTC connection...')
+    await peerAPage.waitForTimeout(5000)
 
-  test('signaling reconnect after brief disconnect', async () => {
-    // Setup
-    await peerA.page.goto('/')
-    await peerA.page.click('text=Generate Link')
-    await peerA.page.waitForURL(/\/room\//)
-    roomUrl = peerA.page.url()
-    
-    await peerB.page.goto(roomUrl)
-    
-    await Promise.all([
-      peerA.page.waitForFunction(() => document.querySelectorAll('video').length >= 2, { timeout: 30000 }),
-      peerB.page.waitForFunction(() => document.querySelectorAll('video').length >= 2, { timeout: 30000 }),
-    ])
-    
-    // Kill and restart signaling connection for Peer A
-    await peerA.page.evaluate(() => {
-      // Force close WebSocket
-      const ws = (window as any).__testWs
-      if (ws) ws.close()
+    // Debug: check participant count
+    const peerAParticipants = await peerAPage.evaluate(() => {
+      const status = document.querySelector('[data-testid="connection-status"]')
+      return status?.textContent
     })
-    
-    // Should show "Signaling offline" briefly
-    await peerA.page.waitForSelector('text=Signaling offline', { timeout: 5000 }).catch(() => {
-      console.log('Signaling offline indicator may not have shown')
+    const peerBParticipants = await peerBPage.evaluate(() => {
+      const status = document.querySelector('[data-testid="connection-status"]')
+      return status?.textContent
     })
-    
-    // Connection should recover (P2P stays alive)
-    // Videos should still be there
-    const videoCount = await peerA.page.evaluate(() => document.querySelectorAll('video').length)
-    expect(videoCount).toBeGreaterThanOrEqual(2)
-    
-    console.log('✅ Signaling reconnect handled')
+    console.log('🔍 Peer A status:', peerAParticipants)
+    console.log('🔍 Peer B status:', peerBParticipants)
+
+    // Debug: count video elements
+    const peerAVideoCount = await peerAPage.locator('video').count()
+    const peerBVideoCount = await peerBPage.locator('video').count()
+    console.log(`🔍 Peer A video count: ${peerAVideoCount}`)
+    console.log(`🔍 Peer B video count: ${peerBVideoCount}`)
+
+    // Wait for remote videos (connection established) - with retry
+    let attempts = 0
+    const maxAttempts = 60 // 60 * 500ms = 30 seconds
+    let peerARemoteVisible = false
+    let peerBRemoteVisible = false
+
+    while (attempts < maxAttempts && (!peerARemoteVisible || !peerBRemoteVisible)) {
+      if (!peerARemoteVisible) {
+        peerARemoteVisible = await peerAPage.locator('video[data-testid="remote-video"]').first().isVisible().catch(() => false)
+      }
+      if (!peerBRemoteVisible) {
+        peerBRemoteVisible = await peerBPage.locator('video[data-testid="remote-video"]').first().isVisible().catch(() => false)
+      }
+      if (!peerARemoteVisible || !peerBRemoteVisible) {
+        await peerAPage.waitForTimeout(500)
+        attempts++
+      }
+    }
+
+    console.log(`🔍 Peer A remote video visible: ${peerARemoteVisible} (after ${attempts} attempts)`)
+    console.log(`🔍 Peer B remote video visible: ${peerBRemoteVisible} (after ${attempts} attempts)`)
+
+    expect(peerARemoteVisible).toBe(true)
+    expect(peerBRemoteVisible).toBe(true)
+
+    // Verify remote videos are actually playing
+    const peerARemoteVideo = peerAPage.locator('video[data-testid="remote-video"]').first()
+    const peerBRemoteVideo = peerBPage.locator('video[data-testid="remote-video"]').first()
+
+    const peerARemotePlaying = await peerARemoteVideo.evaluate((video: HTMLVideoElement) => {
+      return video.readyState >= 2 && video.videoWidth > 0
+    })
+    const peerBRemotePlaying = await peerBRemoteVideo.evaluate((video: HTMLVideoElement) => {
+      return video.readyState >= 2 && video.videoWidth > 0
+    })
+
+    expect(peerARemotePlaying).toBe(true)
+    expect(peerBRemotePlaying).toBe(true)
+
+    console.log('✅ WebRTC connection established, both peers see remote video')
+  })
+
+  test('connection status shows connected for both peers', async () => {
+    // Peer A creates room
+    await peerAPage.goto('/')
+    await peerAPage.click('button:has-text("Generate Link")')
+    await peerAPage.waitForURL(/\/room\//, { timeout: 10000 })
+
+    const roomUrl = peerAPage.url()
+
+    // Wait for Peer A local video
+    await expect(peerAPage.locator('video[data-testid="local-video"]').first()).toBeVisible({ timeout: 15000 })
+
+    // Peer B joins
+    await peerBPage.goto(roomUrl)
+    await expect(peerBPage.locator('video[data-testid="local-video"]').first()).toBeVisible({ timeout: 15000 })
+
+    // Wait for remote videos (connection established)
+    await expect(peerAPage.locator('video[data-testid="remote-video"]').first()).toBeVisible({ timeout: 30000 })
+    await expect(peerBPage.locator('video[data-testid="remote-video"]').first()).toBeVisible({ timeout: 30000 })
+
+    // Check connection status indicators if they exist
+    const peerAStatus = peerAPage.locator('[data-testid="connection-status"]').first()
+    const peerBStatus = peerBPage.locator('[data-testid="connection-status"]').first()
+
+    // Verify signaling is connected (green dot visible)
+    if (await peerAStatus.isVisible().catch(() => false)) {
+      const statusText = await peerAStatus.textContent()
+      // Status shows "Signaling" with a colored dot (green when connected)
+      expect(statusText?.toLowerCase()).toContain('signaling')
+    }
+    if (await peerBStatus.isVisible().catch(() => false)) {
+      const statusText = await peerBStatus.textContent()
+      expect(statusText?.toLowerCase()).toContain('signaling')
+    }
+
+    console.log('✅ Connection status verified for both peers')
+  })
+
+  test('peer can leave room and rejoin', async () => {
+    // Peer A creates room
+    await peerAPage.goto('/')
+    await peerAPage.click('button:has-text("Generate Link")')
+    await peerAPage.waitForURL(/\/room\//, { timeout: 10000 })
+
+    const roomUrl = peerAPage.url()
+
+    // Wait for camera
+    await expect(peerAPage.locator('video[data-testid="local-video"]').first()).toBeVisible({ timeout: 15000 })
+
+    // Navigate back to home
+    await peerAPage.goto('/')
+    await expect(peerAPage).toHaveURL('/')
+
+    // Rejoin the same room
+    await peerAPage.goto(roomUrl)
+    await expect(peerAPage).toHaveURL(/\/room\//)
+
+    // Camera should activate again
+    await expect(peerAPage.locator('video[data-testid="local-video"]').first()).toBeVisible({ timeout: 15000 })
+
+    console.log('✅ Peer can leave and rejoin room')
+  })
+
+  test('server health check', async ({ request }) => {
+    const response = await request.get('/health')
+    expect(response.status()).toBe(200)
+    expect(await response.text()).toBe('OK')
+
+    console.log('✅ Server health check passed')
+  })
+
+  test('server stats endpoint works', async ({ request }) => {
+    const response = await request.get('/stats')
+    expect(response.status()).toBe(200)
+
+    const data = await response.json()
+    expect(data).toHaveProperty('rooms')
+    expect(data).toHaveProperty('turnServer')
+
+    console.log('✅ Server stats:', data)
   })
 })

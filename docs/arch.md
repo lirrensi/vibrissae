@@ -157,6 +157,21 @@ interface SignalingMessage {
   to?: string;        // target participant ID (for direct messages)
   payload?: any;      // SDP, ICE candidate, or error details
 }
+
+// join-ack payload
+interface JoinAckPayload {
+  participantId: string;
+  roomId: string;
+  turnCredentials?: { username: string; password: string; };
+  existingPeers: string[];
+  initiatorId: string;  // who initiates connections
+}
+
+// peer-joined payload  
+interface PeerJoinedPayload {
+  participantId: string;
+  initiatorId: string;  // who should initiate to this new peer
+}
 ```
 
 **Message Flow:**
@@ -186,6 +201,20 @@ Participant A                Server                Participant B
 4. Server broadcasts `peer-joined` to existing participants
 5. Server relays offers/answers/ICE candidates between participants
 6. On disconnect, server broadcasts `peer-left`
+
+### Initiator Assignment
+
+To prevent race conditions where both peers try to initiate simultaneously, the server 
+designates a single "initiator" for each connection:
+
+- **On join:** If room was empty, new participant is initiator. Otherwise, the 
+  longest-connected existing participant becomes initiator.
+- **On peer-joined:** Server tells existing participants who should initiate to the newcomer.
+- **When initiator leaves:** The next longest-connected participant automatically becomes 
+  the new initiator (server recalculates on each join).
+
+This ensures exactly one peer initiates each WebRTC connection, preventing the "stable" 
+state conflict that occurs when both sides create offers simultaneously.
 
 ### TURN Server (`turn.go`)
 
