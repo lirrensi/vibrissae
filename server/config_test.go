@@ -28,12 +28,14 @@ func TestLoadConfig_ValidFile(t *testing.T) {
 	configPath := filepath.Join(tmpDir, "config.json")
 
 	configData := `{
+		"mode": "proxy",
 		"port": 9090,
+		"public_ip": "1.2.3.4",
+		"turn_port": 3478,
 		"base_url": "https://example.com",
 		"room_ttl_minutes": 120,
 		"turn": {
 			"enabled": true,
-			"port": 3479,
 			"rate_limit_per_ip": 20,
 			"credential_ttl_minutes": 60,
 			"secret": "testsecret123"
@@ -49,8 +51,17 @@ func TestLoadConfig_ValidFile(t *testing.T) {
 		t.Fatalf("LoadConfig failed: %v", err)
 	}
 
+	if cfg.Mode != "proxy" {
+		t.Errorf("Expected Mode 'proxy', got %s", cfg.Mode)
+	}
 	if cfg.Port != 9090 {
 		t.Errorf("Expected Port 9090, got %d", cfg.Port)
+	}
+	if cfg.PublicIP != "1.2.3.4" {
+		t.Errorf("Expected PublicIP '1.2.3.4', got %s", cfg.PublicIP)
+	}
+	if cfg.TurnPort != 3478 {
+		t.Errorf("Expected TurnPort 3478, got %d", cfg.TurnPort)
 	}
 	if cfg.BaseURL != "https://example.com" {
 		t.Errorf("Expected BaseURL 'https://example.com', got %s", cfg.BaseURL)
@@ -60,9 +71,6 @@ func TestLoadConfig_ValidFile(t *testing.T) {
 	}
 	if !cfg.Turn.Enabled {
 		t.Error("Expected Turn.Enabled to be true")
-	}
-	if cfg.Turn.Port != 3479 {
-		t.Errorf("Expected Turn.Port 3479, got %d", cfg.Turn.Port)
 	}
 	if cfg.Turn.Secret != "testsecret123" {
 		t.Errorf("Expected Turn.Secret 'testsecret123', got %s", cfg.Turn.Secret)
@@ -102,6 +110,9 @@ func TestLoadConfig_EmptyFile(t *testing.T) {
 	if cfg.Port != 8080 {
 		t.Errorf("Expected default Port 8080, got %d", cfg.Port)
 	}
+	if cfg.TurnPort != 3478 {
+		t.Errorf("Expected default TurnPort 3478, got %d", cfg.TurnPort)
+	}
 }
 
 func TestApplyDefaults_AllFields(t *testing.T) {
@@ -112,14 +123,14 @@ func TestApplyDefaults_AllFields(t *testing.T) {
 	if cfg.Port != 8080 {
 		t.Errorf("Expected default Port 8080, got %d", cfg.Port)
 	}
+	if cfg.TurnPort != 3478 {
+		t.Errorf("Expected default TurnPort 3478, got %d", cfg.TurnPort)
+	}
 	if cfg.RoomTTLMins != 60 {
 		t.Errorf("Expected default RoomTTLMins 60, got %d", cfg.RoomTTLMins)
 	}
 	if !cfg.Turn.Enabled {
 		t.Error("Expected Turn.Enabled to be true by default")
-	}
-	if cfg.Turn.Port != 3478 {
-		t.Errorf("Expected default Turn.Port 3478, got %d", cfg.Turn.Port)
 	}
 	if cfg.Turn.RateLimitPerIP != 10 {
 		t.Errorf("Expected default Turn.RateLimitPerIP 10, got %d", cfg.Turn.RateLimitPerIP)
@@ -134,10 +145,8 @@ func TestApplyDefaults_AllFields(t *testing.T) {
 
 func TestApplyDefaults_PartialOverride(t *testing.T) {
 	cfg := &Config{
-		Port: 3000,
-		Turn: TurnConfig{
-			Port: 5000,
-		},
+		Port:     3000,
+		TurnPort: 5000,
 	}
 	cfg.ApplyDefaults()
 
@@ -145,8 +154,8 @@ func TestApplyDefaults_PartialOverride(t *testing.T) {
 	if cfg.Port != 3000 {
 		t.Errorf("Expected Port 3000, got %d", cfg.Port)
 	}
-	if cfg.Turn.Port != 5000 {
-		t.Errorf("Expected Turn.Port 5000, got %d", cfg.Turn.Port)
+	if cfg.TurnPort != 5000 {
+		t.Errorf("Expected TurnPort 5000, got %d", cfg.TurnPort)
 	}
 
 	// Unspecified values should have defaults
@@ -159,8 +168,7 @@ func TestApplyDefaults_PartialOverride(t *testing.T) {
 }
 
 func TestApplyDefaults_TurnAutoEnable(t *testing.T) {
-	// When both Enabled and Port are default (false and 0), TURN should be enabled
-	// This is the "works out of the box" behavior
+	// When Enabled is not explicitly set, TURN should be enabled
 	cfg := &Config{}
 	cfg.ApplyDefaults()
 
@@ -169,56 +177,31 @@ func TestApplyDefaults_TurnAutoEnable(t *testing.T) {
 	}
 }
 
-func TestApplyDefaults_TurnPortSetNotEnabled(t *testing.T) {
-	// If Port is set but Enabled is not explicitly set (defaults to false),
-	// the condition !Enabled && Port==0 is false (because Port != 0),
-	// so TURN stays disabled.
-	// This is the current behavior - may be a bug or intentional.
-	cfg := &Config{
-		Turn: TurnConfig{
-			Port: 3479,
-		},
-	}
-	cfg.ApplyDefaults()
-
-	// Current behavior: when Port is set, Enabled stays false
-	// This is because the auto-enable only triggers when BOTH are default
-	if cfg.Turn.Enabled {
-		t.Error("Current behavior: Port set means no auto-enable")
-	}
-}
-
-func TestApplyDefaults_TurnExplicitlyDisabled(t *testing.T) {
-	// Interestingly, setting Enabled=false alone still auto-enables!
-	// Because: !false && 0==0 = true && true = true
-	// This is the "works out of the box" behavior - to explicitly disable,
-	// you need to set Port to non-zero
+func TestApplyDefaults_TurnExplicitlyDisabledWithSecret(t *testing.T) {
+	// To disable TURN, set Enabled=false AND provide a secret
 	cfg := &Config{
 		Turn: TurnConfig{
 			Enabled: false,
-		},
-	}
-	cfg.ApplyDefaults()
-
-	// Auto-enable kicks in because Port is still 0
-	if !cfg.Turn.Enabled {
-		t.Error("Current behavior: setting only Enabled=false still auto-enables")
-	}
-}
-
-func TestApplyDefaults_TurnExplicitlyDisabledWithPort(t *testing.T) {
-	// To actually disable TURN, set both Enabled=false AND Port to non-zero
-	cfg := &Config{
-		Turn: TurnConfig{
-			Enabled: false,
-			Port:    1, // Any non-zero port
+			Secret:  "user-provided-secret",
 		},
 	}
 	cfg.ApplyDefaults()
 
 	// This should stay disabled
 	if cfg.Turn.Enabled {
-		t.Error("Turn should stay disabled when explicitly set to false with non-zero port")
+		t.Error("Turn should stay disabled when explicitly set to false with a secret")
+	}
+}
+
+func TestApplyDefaults_DirectModeAutoPublicIP(t *testing.T) {
+	cfg := &Config{
+		Mode:   "direct",
+		Domain: "example.com",
+	}
+	cfg.ApplyDefaults()
+
+	if cfg.PublicIP != "auto" {
+		t.Errorf("Expected PublicIP 'auto' in direct mode, got %s", cfg.PublicIP)
 	}
 }
 
@@ -267,48 +250,55 @@ func TestValidate(t *testing.T) {
 		name    string
 		config  *Config
 		wantErr bool
+		errMsg  string
 	}{
 		{
-			name:    "empty config",
+			name:    "empty config - no mode",
 			config:  &Config{},
-			wantErr: false, // Validate currently returns nil always
+			wantErr: true,
+			errMsg:  "mode must be",
 		},
 		{
-			name: "full config",
+			name: "direct mode - valid",
 			config: &Config{
-				Port:        8080,
-				RoomTTLMins: 60,
-				Turn: TurnConfig{
-					Enabled: true,
-					Port:    3478,
-					Secret:  "secret",
-				},
+				Mode:   "direct",
+				Domain: "example.com",
 			},
 			wantErr: false,
 		},
 		{
-			name: "zero port",
+			name: "direct mode - missing domain",
 			config: &Config{
-				Port: 0,
+				Mode: "direct",
 			},
-			wantErr: false, // No validation on port
+			wantErr: true,
+			errMsg:  "domain required",
 		},
 		{
-			name: "negative port",
+			name: "proxy mode - valid",
 			config: &Config{
-				Port: -1,
+				Mode:     "proxy",
+				Port:     8080,
+				PublicIP: "1.2.3.4",
 			},
-			wantErr: false, // No validation on negative port
+			wantErr: false,
 		},
 		{
-			name: "turn enabled without secret",
+			name: "proxy mode - missing public_ip",
 			config: &Config{
-				Turn: TurnConfig{
-					Enabled: true,
-					Secret:  "",
-				},
+				Mode: "proxy",
+				Port: 8080,
 			},
-			wantErr: false, // Secret will be generated
+			wantErr: true,
+			errMsg:  "public_ip required",
+		},
+		{
+			name: "invalid mode",
+			config: &Config{
+				Mode: "invalid",
+			},
+			wantErr: true,
+			errMsg:  "mode must be",
 		},
 	}
 
@@ -318,17 +308,23 @@ func TestValidate(t *testing.T) {
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
 			}
+			if err != nil && tt.errMsg != "" && !strings.Contains(err.Error(), tt.errMsg) {
+				t.Errorf("Expected error to contain '%s', got '%s'", tt.errMsg, err.Error())
+			}
 		})
 	}
 }
 
 func TestFrontendConfig(t *testing.T) {
 	cfg := &Config{
+		Mode:        "proxy",
+		Port:        8080,
+		TurnPort:    3478,
+		PublicIP:    "1.2.3.4",
 		BaseURL:     "https://test.example.com",
 		RoomTTLMins: 30,
 		Turn: TurnConfig{
 			Enabled: true,
-			Port:    3478,
 			Secret:  "testsecret",
 		},
 		TurnServers: []TurnServer{
@@ -442,13 +438,20 @@ func TestTurnServer_OptionalFields(t *testing.T) {
 // ============================================================================
 
 func TestApplyDefaults_MutationPort(t *testing.T) {
-	// If we change the default port, this should fail
 	cfg := &Config{}
 	cfg.ApplyDefaults()
 
-	// This test documents the expected default
 	if cfg.Port != 8080 {
 		t.Errorf("Port default changed! Expected 8080, got %d", cfg.Port)
+	}
+}
+
+func TestApplyDefaults_MutationTurnPort(t *testing.T) {
+	cfg := &Config{}
+	cfg.ApplyDefaults()
+
+	if cfg.TurnPort != 3478 {
+		t.Errorf("TurnPort default changed! Expected 3478, got %d", cfg.TurnPort)
 	}
 }
 
@@ -458,5 +461,17 @@ func TestApplyDefaults_MutationTTL(t *testing.T) {
 
 	if cfg.RoomTTLMins != 60 {
 		t.Errorf("RoomTTLMins default changed! Expected 60, got %d", cfg.RoomTTLMins)
+	}
+}
+
+func TestIsDirectMode(t *testing.T) {
+	cfg := &Config{Mode: "direct"}
+	if !cfg.IsDirectMode() {
+		t.Error("IsDirectMode should return true for mode='direct'")
+	}
+
+	cfg = &Config{Mode: "proxy"}
+	if cfg.IsDirectMode() {
+		t.Error("IsDirectMode should return false for mode='proxy'")
 	}
 }

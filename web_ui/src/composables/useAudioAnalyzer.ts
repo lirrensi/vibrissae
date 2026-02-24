@@ -64,6 +64,13 @@ export function useAudioAnalyzer(stream: Ref<MediaStream | null | undefined>) {
     volume.value = 0
   }
 
+  function reattach() {
+    stopAnalyzing()
+    if (stream.value) {
+      startAnalyzing()
+    }
+  }
+
   watch(stream, (newStream) => {
     stopAnalyzing()
     if (newStream) {
@@ -74,6 +81,7 @@ export function useAudioAnalyzer(stream: Ref<MediaStream | null | undefined>) {
   onUnmounted(stopAnalyzing)
 
   return {
-    volume
+    volume,
+    reattach
   }
 }

@@ -1,11 +1,12 @@
 module videochat
 
-go 1.21
+go 1.24.0
 
 require (
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.1
 	github.com/pion/turn/v4 v4.0.0
+	golang.org/x/crypto v0.25.0
 )
 
 require (
@@ -15,7 +16,7 @@ require (
 	github.com/pion/stun/v3 v3.0.0 // indirect
 	github.com/pion/transport/v3 v3.0.7 // indirect
 	github.com/wlynxg/anet v0.0.3 // indirect
-	golang.org/x/crypto v0.25.0 // indirect
 	golang.org/x/net v0.27.0 // indirect
 	golang.org/x/sys v0.22.0 // indirect
+	golang.org/x/text v0.34.0 // indirect
 )

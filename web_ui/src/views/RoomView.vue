@@ -100,21 +100,71 @@ function handleSignalingMessage(msg: SignalingMessage) {
   }
 }
 
-onMounted(async () => {
-  try {
-    // Get media permission first
-    await webrtc.startLocalStream()
-    await devices.getInitialDevices()
-    
-    // Register message handler BEFORE connecting
-    signaling.setMessageHandler(handleSignalingMessage)
-    
-    // Connect to signaling
-    signaling.connect()
-  } catch (err) {
-    error.value = 'Failed to access camera/microphone'
-    isLoading.value = false
+async function handleToggleAudio() {
+  if (webrtc.hasAudio.value) {
+    webrtc.toggleAudio()
+  } else {
+    const success = await webrtc.enableAudio()
+    if (success) {
+      await devices.enumerateDevices()
+      audioAnalyzer.reattach()
+    }
   }
+}
+
+async function handleToggleVideo() {
+  if (webrtc.hasVideo.value) {
+    webrtc.toggleVideo()
+  } else {
+    const success = await webrtc.enableVideo()
+    if (success) {
+      await devices.enumerateDevices()
+    }
+  }
+}
+
+async function handleSelectCamera(deviceId: string) {
+  devices.setCamera(deviceId)
+  const success = await webrtc.switchVideoDevice(deviceId)
+  if (!success) {
+    console.log('Failed to switch camera')
+  }
+}
+
+async function handleSelectMicrophone(deviceId: string) {
+  devices.setMicrophone(deviceId)
+  const success = await webrtc.switchAudioDevice(deviceId)
+  if (success) {
+    audioAnalyzer.reattach()
+  }
+}
+
+onMounted(async () => {
+  // Register message handler BEFORE connecting
+  signaling.setMessageHandler(handleSignalingMessage)
+  
+  // Connect to signaling FIRST (join the room)
+  signaling.connect()
+  
+  // Try to get audio (non-blocking)
+  const audioOk = await webrtc.tryGetAudio()
+  if (audioOk) {
+    await devices.getInitialDevices()
+  } else {
+    // Still enumerate devices even if audio failed
+    try {
+      await devices.getInitialDevices()
+    } catch {
+      console.log('Could not enumerate devices')
+    }
+  }
+  
+  // Video starts off - only request when user enables it
+  webrtc.isVideoOff.value = true
+  webrtc.hasVideo.value = false
+  
+  // We're ready regardless of media status
+  isLoading.value = false
 })
 
 onUnmounted(() => {
@@ -191,11 +241,13 @@ function leave() {
       :microphones="devices.microphones.value"
       :selectedCamera="devices.selectedCamera.value"
       :selectedMicrophone="devices.selectedMicrophone.value"
-      @toggleAudio="webrtc.toggleAudio"
-      @toggleVideo="webrtc.toggleVideo"
+      :hasAudio="webrtc.hasAudio.value"
+      :hasVideo="webrtc.hasVideo.value"
+      @toggleAudio="handleToggleAudio"
+      @toggleVideo="handleToggleVideo"
       @toggleDeafen="deafen.toggleDeafen"
-      @selectCamera="(id) => { devices.setCamera(id); webrtc.switchVideoDevice(id); }"
-      @selectMicrophone="(id) => { devices.setMicrophone(id); webrtc.switchAudioDevice(id); }"
+      @selectCamera="handleSelectCamera"
+      @selectMicrophone="handleSelectMicrophone"
       @leave="leave"
     />
     

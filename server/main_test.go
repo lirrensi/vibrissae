@@ -25,7 +25,7 @@ func TestHealthEndpoint(t *testing.T) {
 	rooms := NewRoomManager(time.Hour)
 	defer rooms.Stop()
 
-	cfg := &Config{Turn: TurnConfig{Enabled: false}}
+	cfg := &Config{Mode: "proxy", PublicIP: "127.0.0.1", Turn: TurnConfig{Enabled: false}}
 	cfg.ApplyDefaults()
 
 	mux := http.NewServeMux()
@@ -54,7 +54,9 @@ func TestStatsEndpoint(t *testing.T) {
 	defer rooms.Stop()
 
 	cfg := &Config{
-		Turn: TurnConfig{Enabled: true},
+		Mode:     "proxy",
+		PublicIP: "127.0.0.1",
+		Turn:     TurnConfig{Enabled: true},
 	}
 	cfg.ApplyDefaults()
 
@@ -96,19 +98,6 @@ func TestStatsEndpoint(t *testing.T) {
 
 // TestFullServerStack tests the entire server stack
 func TestFullServerStack(t *testing.T) {
-	cfg := &Config{
-		Port:        0, // Let OS assign
-		RoomTTLMins: 60,
-		Turn: TurnConfig{
-			Enabled:          true,
-			Port:             0, // Let OS assign
-			Secret:           "test-secret",
-			RateLimitPerIP:   10,
-			CredentialTTLMin: 30,
-		},
-	}
-	cfg.ApplyDefaults()
-
 	// Find available ports
 	httpListener, err := net.Listen("tcp", ":0")
 	if err != nil {
@@ -124,13 +113,25 @@ func TestFullServerStack(t *testing.T) {
 	turnPort := turnListener.LocalAddr().(*net.UDPAddr).Port
 	turnListener.Close()
 
-	cfg.Port = httpPort
-	cfg.Turn.Port = turnPort
+	cfg := &Config{
+		Mode:        "proxy",
+		Port:        httpPort,
+		PublicIP:    "127.0.0.1",
+		TurnPort:    turnPort,
+		RoomTTLMins: 60,
+		Turn: TurnConfig{
+			Enabled:          true,
+			Secret:           "test-secret",
+			RateLimitPerIP:   10,
+			CredentialTTLMin: 30,
+		},
+	}
+	cfg.ApplyDefaults()
 
 	// Create TURN server
 	var turnServer *EmbeddedTurnServer
 	if cfg.Turn.Enabled {
-		turnServer, err = NewEmbeddedTurnServer(cfg.Turn)
+		turnServer, err = NewEmbeddedTurnServer(cfg.Turn, cfg.PublicIP, cfg.TurnPort)
 		if err != nil {
 			t.Logf("Warning: Could not start TURN server: %v", err)
 			cfg.Turn.Enabled = false
@@ -241,7 +242,7 @@ func TestManyRoomsCreation(t *testing.T) {
 
 func TestGracefulShutdown(t *testing.T) {
 	rooms := NewRoomManager(time.Hour)
-	cfg := &Config{Turn: TurnConfig{Enabled: false}}
+	cfg := &Config{Mode: "proxy", PublicIP: "127.0.0.1", Turn: TurnConfig{Enabled: false}}
 	cfg.ApplyDefaults()
 
 	mux := http.NewServeMux()
@@ -296,7 +297,7 @@ func TestInvalidWebSocketPath(t *testing.T) {
 	rooms := NewRoomManager(time.Hour)
 	defer rooms.Stop()
 
-	cfg := &Config{Turn: TurnConfig{Enabled: false}}
+	cfg := &Config{Mode: "proxy", PublicIP: "127.0.0.1", Turn: TurnConfig{Enabled: false}}
 	handler := NewSignalingHandler(rooms, cfg)
 
 	server := httptest.NewServer(handler)
@@ -375,6 +376,8 @@ func TestRoomCleanupFreesMemory(t *testing.T) {
 
 func TestConfigIntegrationWithServer(t *testing.T) {
 	cfg := &Config{
+		Mode:        "proxy",
+		PublicIP:    "127.0.0.1",
 		Port:        8888,
 		RoomTTLMins: 30,
 		Turn: TurnConfig{

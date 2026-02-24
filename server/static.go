@@ -108,12 +108,21 @@ func (h *SPAHandler) serveIndexWithConfig(w http.ResponseWriter, r *http.Request
 
 // CheckStaticDir checks if the static directory exists (for development mode)
 func CheckStaticDir() string {
+	// Check ./dist first (current build output)
+	if _, err := os.Stat("dist"); err == nil {
+		return "dist"
+	}
+	// Check legacy web_ui/dist
 	staticDir := "web_ui/dist"
 	if _, err := os.Stat(staticDir); os.IsNotExist(err) {
 		// Try relative to binary location
 		execPath, _ := os.Executable()
 		binDir := filepath.Dir(execPath)
-		altDir := filepath.Join(binDir, "web_ui/dist")
+		altDir := filepath.Join(binDir, "dist")
+		if _, err := os.Stat(altDir); err == nil {
+			return altDir
+		}
+		altDir = filepath.Join(binDir, "web_ui", "dist")
 		if _, err := os.Stat(altDir); err == nil {
 			return altDir
 		}

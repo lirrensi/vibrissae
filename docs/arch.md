@@ -62,20 +62,72 @@ VideoChat/
 
 ### Entry Point (`main.go`)
 
+**Startup Flow:**
+
 ```
-┌─────────────────────────────────────────────────┐
-│                     main()                       │
-│  ┌─────────────┐  ┌─────────────┐  ┌──────────┐ │
-│  │ Load Config │→ │ Start TURN  │→ │ HTTP Srv │ │
-│  └─────────────┘  └─────────────┘  └──────────┘ │
-│                                          │       │
-│                    ┌─────────────────────┤       │
-│                    ▼                     ▼       │
-│              ┌──────────┐         ┌──────────┐  │
-│              │   WS     │         │  Static  │  │
-│              │ /room/ID │         │  embed   │  │
-│              └──────────┘         └──────────┘  │
-└─────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│                          main()                                   │
+│  ┌─────────────┐                                                  │
+│  │ Load Config │                                                  │
+│  └──────┬──────┘                                                  │
+│         │                                                         │
+│         ▼                                                         │
+│  ┌─────────────────────────────────────────────────────────────┐ │
+│  │ Validate mode                                                │ │
+│  │                                                              │ │
+│  │  cfg.Mode == "direct" ?                                      │ │
+│  │                                                              │ │
+│  │  YES → Direct Mode                                           │ │
+│  │        ├─ Validate domain is set                             │ │
+│  │        ├─ Auto-detect public IP (if "auto")                  │ │
+│  │        ├─ Setup autocert (Let's Encrypt)                     │ │
+│  │        ├─ Listen :80 (HTTP-01 challenge)                     │ │
+│  │        └─ Listen :443 (HTTPS)                                │ │
+│  │                                                              │ │
+│  │  NO → Proxy Mode                                             │ │
+│  │        ├─ Validate public_ip is set                          │ │
+│  │        └─ Listen :port (plain HTTP)                          │ │
+│  └─────────────────────────────────────────────────────────────┘ │
+│         │                                                         │
+│         ▼                                                         │
+│  ┌─────────────┐  ┌─────────────┐  ┌──────────────────────────┐  │
+│  │ Start TURN  │→ │ HTTP Server │→ │ Routes (WS + Static)     │  │
+│  │ (UDP port)  │  │             │  └──────────────────────────┘  │
+│  └─────────────┘  └─────────────┘                                 │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+**Direct Mode:**
+```go
+func startDirectMode(cfg *Config) {
+    // Resolve public IP for TURN relay
+    if cfg.PublicIP == "auto" {
+        cfg.PublicIP = detectPublicIP()
+    }
+    
+    // Setup autocert
+    certManager := autocert.Manager{
+        Prompt:     autocert.AcceptTOS,
+        HostPolicy: autocert.HostWhitelist(cfg.Domain),
+        Cache:      autocert.DirCache("certs"),
+    }
+    
+    // HTTP server on :80 (redirect + ACME challenge)
+    // HTTPS server on :443
+}
+```
+
+**Proxy Mode:**
+```go
+func startProxyMode(cfg *Config) {
+    // Validate public_ip is set (TURN needs it)
+    if cfg.PublicIP == "" {
+        log.Fatal("public_ip required in proxy mode")
+    }
+    
+    // Plain HTTP on configured port
+    // Trust X-Forwarded-* headers
+}
 ```
 
 ### HTTP Routes
@@ -92,16 +144,26 @@ VideoChat/
 
 ```go
 type Config struct {
-    Port           int            `json:"port"`
-    BaseURL        string         `json:"base_url"`
-    RoomTTLMins    int            `json:"room_ttl_minutes"`
-    Turn           TurnConfig     `json:"turn"`
-    TurnServers    []TurnServer   `json:"turn_servers"`
+    // Mode (explicit, no inference)
+    Mode        string `json:"mode"`        // "direct" or "proxy"
+    
+    // Direct mode
+    Domain      string `json:"domain"`      // Required for direct mode
+    
+    // Proxy mode  
+    Port        int    `json:"port"`        // HTTP port (proxy mode)
+    
+    // Both modes
+    TurnPort    int    `json:"turn_port"`   // TURN UDP port
+    PublicIP    string `json:"public_ip"`   // "auto" or explicit IP for TURN relay
+    BaseURL     string `json:"base_url"`
+    RoomTTLMins int          `json:"room_ttl_minutes"`
+    Turn        TurnConfig   `json:"turn"`
+    TurnServers []TurnServer `json:"turn_servers"`
 }
 
 type TurnConfig struct {
     Enabled           bool   `json:"enabled"`
-    Port              int    `json:"port"`
     RateLimitPerIP    int    `json:"rate_limit_per_ip"`
     CredentialTTLMin  int    `json:"credential_ttl_minutes"`
     Secret            string `json:"secret"`
@@ -114,12 +176,42 @@ type TurnServer struct {
 }
 ```
 
+**Mode Validation:**
+```go
+func (c *Config) Validate() error {
+    switch c.Mode {
+    case "direct":
+        if c.Domain == "" {
+            return errors.New("domain required in direct mode")
+        }
+        // PublicIP defaults to "auto"
+    case "proxy":
+        if c.PublicIP == "" {
+            return errors.New("public_ip required in proxy mode")
+        }
+    default:
+        return errors.New("mode must be 'direct' or 'proxy'")
+    }
+    return nil
+}
+```
+
 **Defaults:**
-- Port: 8080
+- Mode: (required, no default)
+- Port: 8080 (proxy mode)
+- TurnPort: 3478
+- PublicIP: "auto" (direct mode) / required (proxy mode)
 - Room TTL: 60 minutes
-- TURN port: 3478
+- TURN enabled: true (works out of the box)
 - Rate limit: 10 concurrent connections per IP
 - Credential TTL: 30 minutes
+
+**Port Summary:**
+
+| Mode | HTTP | HTTPS | TURN (UDP) |
+|------|------|-------|------------|
+| Direct | :80 | :443 | :turn_port |
+| Proxy | :port | (reverse proxy) | :turn_port |
 
 ### Room Management (`room.go`)
 
@@ -218,15 +310,28 @@ state conflict that occurs when both sides create offers simultaneously.
 
 ### TURN Server (`turn.go`)
 
-Uses `pion/turn` embedded in the binary.
+Uses `pion/turn` embedded in the binary. **Cannot be proxied** — requires direct UDP access.
 
 ```go
-func StartTURNServer(cfg TurnConfig) *turn.Server {
-    // pion/turn server setup
+func NewEmbeddedTurnServer(cfg TurnConfig, publicIP string, port int) *turn.Server {
+    // Listen on 0.0.0.0:port (UDP)
+    // Advertise publicIP for relay address
     // Rate limiting per IP
     // HMAC credential validation
 }
 ```
+
+**Relay Address Configuration:**
+```go
+RelayAddressGenerator: &turn.RelayAddressGeneratorStatic{
+    RelayAddress: net.ParseIP(publicIP),  // What clients connect to
+    Address:      "0.0.0.0",               // What we bind to
+}
+```
+
+**Public IP Resolution:**
+- Direct mode: `public_ip: "auto"` → HTTP request to external service
+- Proxy mode: `public_ip` must be set manually
 
 **Rate Limiting:**
 - Map of IP → connection count
@@ -272,7 +377,7 @@ Server injects config in `index.html`:
 ```html
 <script>window.__CONFIG__ = { 
   baseUrl: "https://call.example.com",
-  turn: { enabled: true, ... },
+  turn: { enabled: true, port: 3478 },
   turnCredentials: { username: "...", password: "..." }
 }</script>
 ```
@@ -287,6 +392,8 @@ define: {
   })
 }
 ```
+
+**Note:** `turn.port` is separate from HTTP port since TURN uses UDP directly.
 
 ### Routing
 

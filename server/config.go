@@ -4,12 +4,28 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"io"
+	"net/http"
 	"os"
+	"strings"
+	"time"
 )
 
 // Config holds all server configuration
 type Config struct {
-	Port        int          `json:"port"`
+	// Mode (explicit, no inference)
+	Mode string `json:"mode"` // "direct" or "proxy"
+
+	// Direct mode
+	Domain string `json:"domain"` // Required for direct mode
+
+	// Proxy mode
+	Port int `json:"port"` // HTTP port (proxy mode)
+
+	// Both modes
+	TurnPort    int          `json:"turn_port"` // TURN UDP port
+	PublicIP    string       `json:"public_ip"` // "auto" or explicit IP for TURN relay
 	BaseURL     string       `json:"base_url"`
 	RoomTTLMins int          `json:"room_ttl_minutes"`
 	Turn        TurnConfig   `json:"turn"`
@@ -19,7 +35,6 @@ type Config struct {
 // TurnConfig holds embedded TURN server configuration
 type TurnConfig struct {
 	Enabled          bool   `json:"enabled"`
-	Port             int    `json:"port"`
 	RateLimitPerIP   int    `json:"rate_limit_per_ip"`
 	CredentialTTLMin int    `json:"credential_ttl_minutes"`
 	Secret           string `json:"secret"`
@@ -60,15 +75,16 @@ func (c *Config) ApplyDefaults() {
 	if c.Port == 0 {
 		c.Port = 8080
 	}
+	if c.TurnPort == 0 {
+		c.TurnPort = 3478
+	}
 	if c.RoomTTLMins == 0 {
 		c.RoomTTLMins = 60
 	}
 	// TURN enabled by default - works out of the box
-	if !c.Turn.Enabled && c.Turn.Port == 0 {
+	// But if user explicitly set a secret AND set Enabled=false, respect that
+	if !c.Turn.Enabled && c.Turn.Secret == "" {
 		c.Turn.Enabled = true
-	}
-	if c.Turn.Port == 0 {
-		c.Turn.Port = 3478
 	}
 	if c.Turn.RateLimitPerIP == 0 {
 		c.Turn.RateLimitPerIP = 10
@@ -80,20 +96,63 @@ func (c *Config) ApplyDefaults() {
 	if c.Turn.Secret == "" {
 		c.Turn.Secret = generateRandomSecret()
 	}
+	// Direct mode: default public_ip to "auto"
+	if c.Mode == "direct" && c.PublicIP == "" {
+		c.PublicIP = "auto"
+	}
 }
 
 // Validate checks that required configuration is present
 func (c *Config) Validate() error {
-	// No required fields for basic operation
-	// TURN secret is only required if TURN is enabled
+	switch c.Mode {
+	case "direct":
+		if c.Domain == "" {
+			return errors.New("domain required in direct mode")
+		}
+	case "proxy":
+		if c.PublicIP == "" {
+			return errors.New("public_ip required in proxy mode (can't auto-detect behind proxy)")
+		}
+	default:
+		return errors.New("mode must be 'direct' or 'proxy'")
+	}
 	return nil
+}
+
+// IsDirectMode returns true if running in direct mode
+func (c *Config) IsDirectMode() bool {
+	return c.Mode == "direct"
+}
+
+// ResolvePublicIP resolves the public IP address
+// In direct mode with "auto", fetches from external service
+// Otherwise returns the configured value
+func (c *Config) ResolvePublicIP() (string, error) {
+	if c.PublicIP != "" && c.PublicIP != "auto" {
+		return c.PublicIP, nil
+	}
+
+	// Auto-detect public IP
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Get("https://api.ipify.org")
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	ip, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+
+	return strings.TrimSpace(string(ip)), nil
 }
 
 // FrontendConfig returns a sanitized config for the frontend
 func (c *Config) FrontendConfig(creds TurnCredentials) map[string]interface{} {
 	return map[string]interface{}{
 		"baseUrl":         c.BaseURL,
-		"turn":            map[string]interface{}{"enabled": c.Turn.Enabled, "port": c.Turn.Port},
+		"turn":            map[string]interface{}{"enabled": c.Turn.Enabled, "port": c.TurnPort},
 		"turnCredentials": creds,
 		"turnServers":     c.TurnServers,
 	}

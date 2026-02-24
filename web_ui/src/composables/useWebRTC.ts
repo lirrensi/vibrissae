@@ -34,6 +34,10 @@ export function useWebRTC(
   const dataChannels = ref<Map<string, RTCDataChannel>>(new Map())
   const isMuted = ref(false)
   const isVideoOff = ref(false)
+  const hasAudio = ref(false)
+  const hasVideo = ref(false)
+  const audioError = ref<string | null>(null)
+  const videoError = ref<string | null>(null)
   const iceRestartStates = ref<Map<string, IceRestartState>>(new Map())
   
   // ICE servers configuration
@@ -74,29 +78,100 @@ export function useWebRTC(
     return config
   })
   
-  async function startLocalStream(videoDeviceId?: string, audioDeviceId?: string) {
+  async function tryGetAudio(deviceId?: string): Promise<boolean> {
+    try {
+      const constraints: MediaStreamConstraints = {
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          ...(deviceId ? { deviceId: { exact: deviceId } } : {})
+        },
+        video: false
+      }
+      
+      const stream = await navigator.mediaDevices.getUserMedia(constraints)
+      
+      // If we already have video, add audio track to existing stream
+      if (store.localStream) {
+        const oldAudioTrack = store.localStream.getAudioTracks()[0]
+        if (oldAudioTrack) {
+          store.localStream.removeTrack(oldAudioTrack)
+          oldAudioTrack.stop()
+        }
+        store.localStream.addTrack(stream.getAudioTracks()[0]!)
+      } else {
+        store.setLocalStream(stream)
+      }
+      
+      // Replace audio track in peer connections
+      const newAudioTrack = stream.getAudioTracks()[0]!
+      peerConnections.value.forEach(pc => {
+        const sender = pc.getSenders().find(s => s.track?.kind === 'audio')
+        if (sender) {
+          sender.replaceTrack(newAudioTrack)
+        } else {
+          pc.addTrack(newAudioTrack, store.localStream!)
+        }
+      })
+      
+      hasAudio.value = true
+      audioError.value = null
+      return true
+    } catch (err) {
+      console.error('Failed to get audio:', err)
+      audioError.value = err instanceof Error ? err.message : 'Unknown audio error'
+      hasAudio.value = false
+      return false
+    }
+  }
+
+  async function tryGetVideo(deviceId?: string): Promise<boolean> {
     try {
       const constraints: MediaStreamConstraints = {
         video: {
           width: { ideal: 1920, max: 1920 },
           height: { ideal: 1080, max: 1080 },
           frameRate: { ideal: 30, max: 60 },
-          ...(videoDeviceId ? { deviceId: { exact: videoDeviceId } } : {})
+          ...(deviceId ? { deviceId: { exact: deviceId } } : {})
         },
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-          ...(audioDeviceId ? { deviceId: { exact: audioDeviceId } } : {})
-        }
+        audio: false
       }
       
       const stream = await navigator.mediaDevices.getUserMedia(constraints)
-      store.setLocalStream(stream)
-      return stream
+      
+      // If we already have audio, add video track to existing stream
+      if (store.localStream) {
+        const oldVideoTrack = store.localStream.getVideoTracks()[0]
+        if (oldVideoTrack) {
+          store.localStream.removeTrack(oldVideoTrack)
+          oldVideoTrack.stop()
+        }
+        store.localStream.addTrack(stream.getVideoTracks()[0]!)
+      } else {
+        store.setLocalStream(stream)
+      }
+      
+      // Replace video track in peer connections
+      const newVideoTrack = stream.getVideoTracks()[0]!
+      peerConnections.value.forEach(pc => {
+        const sender = pc.getSenders().find(s => s.track?.kind === 'video')
+        if (sender) {
+          sender.replaceTrack(newVideoTrack)
+        } else {
+          pc.addTrack(newVideoTrack, store.localStream!)
+        }
+      })
+      
+      hasVideo.value = true
+      isVideoOff.value = false
+      videoError.value = null
+      return true
     } catch (err) {
-      console.error('Failed to get media stream:', err)
-      throw err
+      console.error('Failed to get video:', err)
+      videoError.value = err instanceof Error ? err.message : 'Unknown video error'
+      hasVideo.value = false
+      return false
     }
   }
   
@@ -339,71 +414,57 @@ export function useWebRTC(
   }
   
   function toggleVideo() {
+    if (!hasVideo.value) {
+      // No video yet, try to get it
+      return
+    }
     isVideoOff.value = !isVideoOff.value
     store.localStream?.getVideoTracks().forEach(t => {
       t.enabled = !isVideoOff.value
     })
   }
+
+  async function enableVideo(): Promise<boolean> {
+    if (hasVideo.value) {
+      isVideoOff.value = false
+      store.localStream?.getVideoTracks().forEach(t => {
+        t.enabled = true
+      })
+      return true
+    }
+    return await tryGetVideo()
+  }
   
   function toggleAudio() {
+    if (!hasAudio.value) {
+      // No audio yet, try to get it
+      return
+    }
     isMuted.value = !isMuted.value
     store.localStream?.getAudioTracks().forEach(t => {
       t.enabled = !isMuted.value
     })
   }
-  
-  async function switchVideoDevice(deviceId: string) {
-    // Need to renegotiate after switching device
-    const oldTrack = store.localStream?.getVideoTracks()[0]
-    
-    const newStream = await navigator.mediaDevices.getUserMedia({
-      video: {
-        width: { ideal: 1920, max: 1920 },
-        height: { ideal: 1080, max: 1080 },
-        frameRate: { ideal: 30, max: 60 },
-        deviceId: { exact: deviceId }
-      }
-    })
-    const newTrack = newStream.getVideoTracks()[0]
-    if (!newTrack) return
-    
-    // Replace track in all peer connections
-    peerConnections.value.forEach(pc => {
-      const sender = pc.getSenders().find(s => s.track?.kind === 'video')
-      if (sender) {
-        sender.replaceTrack(newTrack)
-      }
-    })
-    
-    // Update local stream
-    if (store.localStream && oldTrack) {
-      store.localStream.removeTrack(oldTrack)
-      store.localStream.addTrack(newTrack)
-      oldTrack.stop()
+
+  async function enableAudio(): Promise<boolean> {
+    if (hasAudio.value) {
+      isMuted.value = false
+      store.localStream?.getAudioTracks().forEach(t => {
+        t.enabled = true
+      })
+      return true
     }
+    return await tryGetAudio()
   }
   
-  async function switchAudioDevice(deviceId: string) {
-    const oldTrack = store.localStream?.getAudioTracks()[0]
-    
-    const newStream = await navigator.mediaDevices.getUserMedia({
-      audio: { deviceId: { exact: deviceId } }
-    })
-    const newTrack = newStream.getAudioTracks()[0]
-    if (!newTrack) return
-    
-    peerConnections.value.forEach(pc => {
-      const sender = pc.getSenders().find(s => s.track?.kind === 'audio')
-      if (sender) {
-        sender.replaceTrack(newTrack)
-      }
-    })
-    
-    if (store.localStream && oldTrack) {
-      store.localStream.removeTrack(oldTrack)
-      store.localStream.addTrack(newTrack)
-      oldTrack.stop()
-    }
+  async function switchVideoDevice(deviceId: string): Promise<boolean> {
+    const success = await tryGetVideo(deviceId)
+    return success
+  }
+  
+  async function switchAudioDevice(deviceId: string): Promise<boolean> {
+    const success = await tryGetAudio(deviceId)
+    return success
   }
   
   function closePeerConnection(participantId: string) {
@@ -432,9 +493,13 @@ export function useWebRTC(
     dataChannels,
     isMuted,
     isVideoOff,
+    hasAudio,
+    hasVideo,
+    audioError,
+    videoError,
     rtcConfig,
-    startLocalStream,
-    stopLocalStream,
+    tryGetAudio,
+    tryGetVideo,
     createPeerConnection,
     handleOffer,
     handleAnswer,
@@ -443,6 +508,8 @@ export function useWebRTC(
     restartIce,
     toggleVideo,
     toggleAudio,
+    enableVideo,
+    enableAudio,
     switchVideoDevice,
     switchAudioDevice,
     closePeerConnection,

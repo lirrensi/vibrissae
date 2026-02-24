@@ -437,9 +437,9 @@ func TestSignalingHandler_TurnCredentials(t *testing.T) {
 	defer rooms.Stop()
 
 	cfg := &Config{
+		Port: 8080,
 		Turn: TurnConfig{
 			Enabled:          true,
-			Port:             3478,
 			Secret:           "test-secret-123",
 			CredentialTTLMin: 30,
 		},

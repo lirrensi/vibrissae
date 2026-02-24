@@ -1,10 +1,12 @@
 {
+  "mode": "proxy",
   "port": 8080,
+  "public_ip": "1.2.3.4",
+  "turn_port": 3478,
   "base_url": "",
   "room_ttl_minutes": 60,
   "turn": {
     "enabled": true,
-    "port": 3478,
     "rate_limit_per_ip": 10,
     "credential_ttl_minutes": 30,
     "secret": "your-secret-here-change-in-production"

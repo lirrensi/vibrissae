@@ -12,6 +12,8 @@ defineProps<{
   microphones: MediaDeviceInfo[]
   selectedCamera: string | null
   selectedMicrophone: string | null
+  hasAudio: boolean
+  hasVideo: boolean
 }>()
 
 const emit = defineEmits<{
@@ -32,6 +34,7 @@ const emit = defineEmits<{
       :volume="micVolume"
       :microphones="microphones"
       :selectedMicrophone="selectedMicrophone"
+      :hasAudio="hasAudio"
       @toggle="emit('toggleAudio')"
       @selectDevice="emit('selectMicrophone', $event)"
     />
@@ -41,6 +44,7 @@ const emit = defineEmits<{
       :isVideoOff="isVideoOff"
       :cameras="cameras"
       :selectedCamera="selectedCamera"
+      :hasVideo="hasVideo"
       @toggle="emit('toggleVideo')"
       @selectDevice="emit('selectCamera', $event)"
     />

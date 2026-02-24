@@ -117,7 +117,7 @@ func TestNewEmbeddedTurnServer_Disabled(t *testing.T) {
 		Enabled: false,
 	}
 
-	server, err := NewEmbeddedTurnServer(cfg)
+	server, err := NewEmbeddedTurnServer(cfg, "127.0.0.1", 3478)
 	if err != nil {
 		t.Errorf("Should not error when disabled: %v", err)
 	}
@@ -127,7 +127,7 @@ func TestNewEmbeddedTurnServer_Disabled(t *testing.T) {
 }
 
 func TestNewEmbeddedTurnServer_PortInUse(t *testing.T) {
-	// First, occupy a port
+	// First, occupy a port on 0.0.0.0 (same as TURN binds to)
 	listener, err := net.ListenPacket("udp4", ":0")
 	if err != nil {
 		t.Fatalf("Failed to create listener: %v", err)
@@ -137,13 +137,14 @@ func TestNewEmbeddedTurnServer_PortInUse(t *testing.T) {
 	// Try to create TURN server on same port
 	cfg := TurnConfig{
 		Enabled:          true,
-		Port:             port,
 		Secret:           "testsecret",
 		RateLimitPerIP:   10,
 		CredentialTTLMin: 30,
 	}
 
-	server, err := NewEmbeddedTurnServer(cfg)
+	server, err := NewEmbeddedTurnServer(cfg, "127.0.0.1", port)
+
+	// Close listener after TURN attempt
 	listener.Close()
 
 	if err == nil {
@@ -157,7 +158,6 @@ func TestNewEmbeddedTurnServer_PortInUse(t *testing.T) {
 func TestNewEmbeddedTurnServer_Success(t *testing.T) {
 	cfg := TurnConfig{
 		Enabled:          true,
-		Port:             0, // Let OS assign port
 		Secret:           "testsecret123",
 		RateLimitPerIP:   10,
 		CredentialTTLMin: 30,
@@ -171,9 +171,7 @@ func TestNewEmbeddedTurnServer_Success(t *testing.T) {
 	port := listener.LocalAddr().(*net.UDPAddr).Port
 	listener.Close()
 
-	cfg.Port = port
-
-	server, err := NewEmbeddedTurnServer(cfg)
+	server, err := NewEmbeddedTurnServer(cfg, "127.0.0.1", port)
 	if err != nil {
 		t.Fatalf("Failed to create TURN server: %v", err)
 	}
@@ -196,7 +194,6 @@ func TestNewEmbeddedTurnServer_Success(t *testing.T) {
 func TestEmbeddedTurnServer_Close(t *testing.T) {
 	cfg := TurnConfig{
 		Enabled:          true,
-		Port:             0,
 		Secret:           "test",
 		RateLimitPerIP:   10,
 		CredentialTTLMin: 30,
@@ -206,9 +203,8 @@ func TestEmbeddedTurnServer_Close(t *testing.T) {
 	listener, _ := net.ListenPacket("udp4", ":0")
 	port := listener.LocalAddr().(*net.UDPAddr).Port
 	listener.Close()
-	cfg.Port = port
 
-	server, err := NewEmbeddedTurnServer(cfg)
+	server, err := NewEmbeddedTurnServer(cfg, "127.0.0.1", port)
 	if err != nil {
 		t.Fatalf("Failed to create server: %v", err)
 	}
@@ -627,13 +623,12 @@ func TestEmbeddedTurnServer_FullAuthFlow(t *testing.T) {
 
 	cfg := TurnConfig{
 		Enabled:          true,
-		Port:             port,
 		Secret:           "integration-secret",
 		RateLimitPerIP:   100,
 		CredentialTTLMin: 60,
 	}
 
-	server, err := NewEmbeddedTurnServer(cfg)
+	server, err := NewEmbeddedTurnServer(cfg, "127.0.0.1", port)
 	if err != nil {
 		t.Fatalf("Failed to create server: %v", err)
 	}

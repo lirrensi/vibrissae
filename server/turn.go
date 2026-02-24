@@ -20,21 +20,29 @@ type EmbeddedTurnServer struct {
 }
 
 // NewEmbeddedTurnServer creates a new embedded TURN server with HMAC authentication
-func NewEmbeddedTurnServer(cfg TurnConfig) (*EmbeddedTurnServer, error) {
+// publicIP is the IP address clients use to connect (for relay address advertisement)
+// port is the UDP port to listen on
+func NewEmbeddedTurnServer(cfg TurnConfig, publicIP string, port int) (*EmbeddedTurnServer, error) {
 	if !cfg.Enabled {
 		return nil, nil
 	}
 
-	// Create UDP listener
-	udpListener, err := net.ListenPacket("udp4", fmt.Sprintf(":%d", cfg.Port))
+	// Create UDP listener on all interfaces
+	udpListener, err := net.ListenPacket("udp4", fmt.Sprintf("0.0.0.0:%d", port))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create UDP listener: %w", err)
 	}
 
 	server := &EmbeddedTurnServer{
-		port:     cfg.Port,
+		port:     port,
 		secret:   cfg.Secret,
 		maxPerIP: cfg.RateLimitPerIP,
+	}
+
+	// Parse public IP for relay address
+	relayIP := net.ParseIP(publicIP)
+	if relayIP == nil {
+		relayIP = net.ParseIP("0.0.0.0")
 	}
 
 	// Create TURN server with our auth handler
@@ -45,8 +53,8 @@ func NewEmbeddedTurnServer(cfg TurnConfig) (*EmbeddedTurnServer, error) {
 			{
 				PacketConn: udpListener,
 				RelayAddressGenerator: &turn.RelayAddressGeneratorStatic{
-					RelayAddress: net.ParseIP("0.0.0.0"),
-					Address:      "0.0.0.0",
+					RelayAddress: relayIP,   // What clients connect to
+					Address:      "0.0.0.0", // What we bind to
 				},
 			},
 		},
@@ -57,7 +65,7 @@ func NewEmbeddedTurnServer(cfg TurnConfig) (*EmbeddedTurnServer, error) {
 	}
 
 	server.server = turnServer
-	log.Printf("Embedded TURN server started on port %d (UDP)", cfg.Port)
+	log.Printf("Embedded TURN server started on 0.0.0.0:%d (UDP), advertising %s:%d", port, publicIP, port)
 
 	// Start rate limit cleanup routine
 	server.startRateLimitCleanup()

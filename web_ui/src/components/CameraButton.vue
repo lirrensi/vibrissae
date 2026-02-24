@@ -5,6 +5,7 @@ const props = defineProps<{
   isVideoOff: boolean
   cameras: MediaDeviceInfo[]
   selectedCamera: string | null
+  hasVideo: boolean
 }>()
 
 const emit = defineEmits<{
@@ -52,9 +53,10 @@ onUnmounted(() => {
         @click="emit('toggle')"
         :class="[
           'p-3 transition-colors',
+          !hasVideo ? 'bg-gray-600 hover:bg-gray-500' :
           isVideoOff ? 'bg-red-600 hover:bg-red-700' : 'hover:bg-gray-600'
         ]"
-        :title="isVideoOff ? 'Turn on camera' : 'Turn off camera'"
+        :title="!hasVideo ? 'Click to enable camera' : isVideoOff ? 'Turn on camera' : 'Turn off camera'"
       >
         <svg v-if="isVideoOff" class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
           <path d="M21 6.5l-4 4V7c0-.55-.45-1-1-1H9.82L21 17.18V6.5zM3.27 2L2 3.27 4.73 6H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.21 0 .39-.08.54-.18L19.73 21 21 19.73 3.27 2z"/>

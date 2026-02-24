@@ -1,10 +1,12 @@
 {
+  "mode": "proxy",
   "port": 28080,
+  "public_ip": "127.0.0.1",
+  "turn_port": 23478,
   "base_url": "http://localhost:28080",
   "room_ttl_minutes": 60,
   "turn": {
     "enabled": true,
-    "port": 23478,
     "rate_limit_per_ip": 10,
     "credential_ttl_minutes": 30,
     "secret": ""

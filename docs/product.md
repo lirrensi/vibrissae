@@ -72,6 +72,67 @@ That's it. No accounts, no configuration, no app installs.
 
 ---
 
+## Deployment Modes
+
+Set `mode` in config explicitly. One binary, two modes, zero confusion.
+
+### Mode: `direct` — Binary Handles Everything
+
+```json
+{
+  "mode": "direct",
+  "domain": "call.example.com",
+  "public_ip": "auto",
+  "turn_port": 3478
+}
+```
+
+- Auto-issues Let's Encrypt certificate
+- Listens on :80 (HTTP-01 challenge) and :443 (HTTPS)
+- Auto-detects public IP for TURN relay
+- TURN on specified UDP port (direct exposure required)
+- Zero infrastructure beyond DNS
+
+**Use case:** Fresh VPS with a domain, want simplest possible deploy.
+
+### Mode: `proxy` — Nginx/Caddy In Front
+
+```json
+{
+  "mode": "proxy",
+  "port": 8080,
+  "public_ip": "1.2.3.4",
+  "turn_port": 3478
+}
+```
+
+- Plain HTTP on internal port
+- Trusts `X-Forwarded-*` headers from reverse proxy
+- Manual `public_ip` required (can't auto-detect behind proxy)
+- TURN still needs direct UDP exposure (nginx can't proxy UDP)
+- You handle TLS termination
+
+**Use case:** Existing infrastructure, docker-compose, behind load balancer.
+
+### Deployment Matrix
+
+| Scenario | Config | Notes |
+|----------|--------|-------|
+| Fresh VPS, have domain | `mode: "direct"` + `domain` | Set DNS A record, run binary |
+| Behind nginx/caddy | `mode: "proxy"` + `port` + `public_ip` | TURN UDP still needs firewall rule |
+| Local dev | `mode: "proxy"` + `port` only | No TURN needed, localhost allows camera |
+| Docker | either mode | Use env vars for config |
+| Raw IP, no domain | `mode: "proxy"` + `public_ip` | Self-signed cert warning in browser |
+
+### TURN Constraint
+
+TURN uses UDP and cannot be proxied. In both modes:
+- TURN port must be directly reachable from clients
+- Firewall must allow UDP on `turn_port`
+- `public_ip` tells clients where to connect for media relay
+
+---
+
 ## Modes Explained
 
 ### Mode 1 — Public Demo (GitHub Pages)
@@ -85,6 +146,7 @@ That's it. No accounts, no configuration, no app installs.
 ### Mode 2 — Self-Hosted Binary
 
 - Single Go binary + `config.json`
+- Two deployment modes (auto-detected)
 - Built-in TURN relay (HMAC auth, rate-limited)
 - Optional external TURN servers
 - Full control over reliability
