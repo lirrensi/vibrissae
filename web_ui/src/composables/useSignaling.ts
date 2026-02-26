@@ -1,68 +1,123 @@
-import { ref, onUnmounted } from 'vue'
+import { ref, onUnmounted, watch } from 'vue'
 import { useRoomStore } from '@/stores/room'
+import { useLogStore } from '@/stores/log'
 import type { SignalingMessage, SignalingMessageType } from '@/types/signaling'
 import type { SignalingTransport } from '@/types/transport'
-import { createWebSocketTransport } from '@/transports/WebSocketTransport'
+import { createTransport } from '@/transports/factory'
 
-export function useSignaling(roomId: string, transport?: SignalingTransport) {
+interface UseSignalingOptions {
+  roomId: string
+  transport?: SignalingTransport
+}
+
+export function useSignaling(options: UseSignalingOptions | string) {
+  const roomId = typeof options === 'string' ? options : options.roomId
+  const providedTransport = typeof options === 'object' ? options.transport : undefined
+
   const store = useRoomStore()
-  
-  // Use provided transport or create default WebSocket transport
-  const t = transport ?? createWebSocketTransport(roomId)
-  
-  const connected = t.connected
+  const logStore = useLogStore()
+
+  // Transport reference (starts as provided or null)
+  let transport: SignalingTransport | null = providedTransport ?? null
+
+  const connected = ref(false)
   const signalingOffline = ref(false)
   const reconnectExhausted = ref(false)
-  
-  const reconnectAttempts = ref(0)
-  const maxReconnectAttempts = 10
-  const baseDelay = 1000
-  let p2pEstablished = false
+
+  const _reconnectAttempts = ref(0)
+  const _maxReconnectAttempts = 10
+  const _baseDelay = 1000
+  let _p2pEstablished = false
   let userMessageHandler: ((msg: SignalingMessage) => void) | null = null
-  
+  let transportInitialized = false
+
   function setMessageHandler(handler: (msg: SignalingMessage) => void) {
     userMessageHandler = handler
   }
-  
+
   function handleInternalMessage(msg: SignalingMessage) {
     switch (msg.type) {
-      case 'join-ack':
-        store.setParticipantId((msg.payload as { participantId: string }).participantId)
+      case 'join-ack': {
+        const payload = msg.payload as { participantId: string; turnCredentials?: unknown }
+        store.setParticipantId(payload.participantId)
+        logStore.info('signaling', 'Join-ack received', {
+          participantId: payload.participantId.slice(0, 8),
+          hasTurnCredentials: !!payload.turnCredentials
+        })
         break
-      case 'peer-joined':
-        store.addParticipant((msg.payload as { participantId: string }).participantId)
+      }
+      case 'peer-joined': {
+        const peerId = (msg.payload as { participantId: string }).participantId
+        store.addParticipant(peerId)
+        logStore.info('signaling', 'Peer joined', { peerId: peerId.slice(0, 8) })
         break
-      case 'peer-left':
-        store.removeParticipant((msg.payload as { participantId: string }).participantId)
+      }
+      case 'peer-left': {
+        const peerId = (msg.payload as { participantId: string }).participantId
+        store.removeParticipant(peerId)
+        logStore.info('signaling', 'Peer left', { peerId: peerId.slice(0, 8) })
         break
+      }
     }
   }
-  
-  // Set up message routing
-  t.onMessage((msg: SignalingMessage) => {
-    handleInternalMessage(msg)
-    userMessageHandler?.(msg)
-  })
-  
-  function connect() {
-    t.connect()
+
+  // Initialize transport if not provided
+  async function initTransport() {
+    if (transportInitialized) return
+    transportInitialized = true
+
+    if (providedTransport) {
+      transport = providedTransport
+    } else {
+      // Use factory to auto-detect mode
+      transport = await createTransport({ roomId })
+    }
+
+    // Set up message routing
+    transport.onMessage((msg: SignalingMessage) => {
+      handleInternalMessage(msg)
+      userMessageHandler?.(msg)
+    })
+
+    // Watch for connection state changes
+    watch(
+      () => transport?.connected.value,
+      (isConnected) => {
+        if (isConnected) {
+          logStore.info('signaling', 'Connected to signaling server')
+        } else {
+          logStore.warn('signaling', 'Disconnected from signaling server')
+        }
+      }
+    )
   }
-  
+
+  async function connect() {
+    await initTransport()
+    connected.value = true
+    transport?.connect()
+  }
+
   function send(type: SignalingMessageType, to?: string, payload?: unknown) {
     const msg: SignalingMessage = { type, to, payload }
-    t.send(msg)
+    transport?.send(msg)
   }
-  
+
   function setP2PEstablished(value: boolean) {
-    p2pEstablished = value
+    _p2pEstablished = value
   }
-  
-  function disconnect() {
-    t.disconnect()
+
+  async function disconnect() {
+    logStore.info('signaling', 'Disconnecting from signaling server')
+    transport?.disconnect()
+    transport = null
+    connected.value = false
   }
-  
-  onUnmounted(disconnect)
-  
+
+  onUnmounted(() => {
+    transport?.disconnect()
+  })
+
   return {
     connected,
     signalingOffline,
@@ -73,4 +128,11 @@ export function useSignaling(roomId: string, transport?: SignalingTransport) {
     setMessageHandler,
     disconnect
   }
+}
+
+// For explicit async transport creation
+export async function createSignalingTransport(
+  options: UseSignalingOptions
+): Promise<SignalingTransport> {
+  return createTransport(options)
 }

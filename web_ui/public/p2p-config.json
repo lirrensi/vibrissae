@@ -1,0 +1,26 @@
+{
+  "$schema": "./p2p-config.schema.json",
+  "version": 1,
+  "transports": {
+    "priority": ["torrent", "nostr"],
+    "torrent": {
+      "enabled": true,
+      "announce": [
+        "wss://tracker.openwebtorrent.com",
+        "wss://tracker.webtorrent.dev"
+      ]
+    },
+    "nostr": {
+      "enabled": true,
+      "relays": [
+        "wss://relay.damus.io",
+        "wss://nostr.mom",
+        "wss://relay.nostr.band"
+      ]
+    }
+  },
+  "signaling": {
+    "resendIntervalMs": 3000,
+    "resendMaxAttempts": 10
+  }
+}

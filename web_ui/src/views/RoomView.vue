@@ -13,6 +13,7 @@ import { useDeafen } from '@/composables/useDeafen'
 import VideoGrid from '@/components/VideoGrid.vue'
 import Controls from '@/components/Controls.vue'
 import Chat from '@/components/Chat.vue'
+import TechLog from '@/components/TechLog.vue'
 import ConnectionStatus from '@/components/ConnectionStatus.vue'
 import type { SignalingMessage, JoinAckPayload, PeerJoinedPayload } from '@/types/signaling'
 
@@ -182,7 +183,7 @@ function leave() {
   <div class="min-h-screen flex flex-col bg-gray-900">
     <!-- Header -->
     <header class="flex items-center justify-between p-4 border-b border-gray-800">
-      <h1 class="text-xl font-semibold">VideoChat</h1>
+      <h1 class="text-xl font-semibold">Vibrissae</h1>
       <ConnectionStatus 
         :signaling="signaling.connected.value"
         :signalingOffline="signaling.signalingOffline.value"
@@ -192,9 +193,9 @@ function leave() {
     </header>
     
     <!-- Main content -->
-    <main class="flex-1 relative">
+    <main class="flex-1 flex min-h-0">
       <!-- Loading state -->
-      <div v-if="isLoading" class="flex items-center justify-center h-full">
+      <div v-if="isLoading" class="flex items-center justify-center h-full w-full">
         <div class="text-center">
           <div class="animate-spin w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full mb-4 mx-auto"></div>
           <p class="text-gray-400">Connecting...</p>
@@ -202,7 +203,7 @@ function leave() {
       </div>
       
       <!-- Error state -->
-      <div v-else-if="error" class="flex items-center justify-center h-full">
+      <div v-else-if="error" class="flex items-center justify-center h-full w-full">
         <div class="text-center">
           <p class="text-red-400 mb-4">{{ error }}</p>
           <button @click="leave" class="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded">
@@ -211,21 +212,38 @@ function leave() {
         </div>
       </div>
       
-      <!-- Call view -->
+      <!-- Call view with 80/20 split -->
       <template v-else>
-        <VideoGrid
-          :localStream="localStream"
-          :participants="participants"
-          :localParticipantId="participantId"
-          :activeSpeaker="speakerDetection.activeSpeaker.value"
-        />
+        <!-- Left: VideoGrid (80%) -->
+        <div class="flex-[8] relative min-w-0">
+          <VideoGrid
+            :localStream="localStream"
+            :participants="participants"
+            :localParticipantId="participantId"
+            :activeSpeaker="speakerDetection.activeSpeaker.value"
+          />
+          
+          <!-- Participant warning -->
+          <div 
+            v-if="store.showWarning" 
+            class="absolute top-4 left-1/2 -translate-x-1/2 bg-yellow-900/50 text-yellow-200 px-4 py-2 rounded-lg text-sm"
+          >
+            High participant count may affect call quality
+          </div>
+        </div>
         
-        <!-- Participant warning -->
-        <div 
-          v-if="store.showWarning" 
-          class="absolute top-4 left-1/2 -translate-x-1/2 bg-yellow-900/50 text-yellow-200 px-4 py-2 rounded-lg text-sm"
-        >
-          High participant count may affect call quality
+        <!-- Right: TechLog + Chat (20%) -->
+        <div class="flex-[2] min-w-[280px] max-w-[400px] flex flex-col gap-2 p-2 border-l border-gray-800">
+          <div class="flex-1 min-h-0">
+            <TechLog />
+          </div>
+          <div class="flex-1 min-h-0">
+            <Chat
+              :messages="chat.messages.value"
+              :localParticipantId="participantId"
+              @send="chat.send"
+            />
+          </div>
         </div>
       </template>
     </main>
@@ -249,16 +267,6 @@ function leave() {
       @selectCamera="handleSelectCamera"
       @selectMicrophone="handleSelectMicrophone"
       @leave="leave"
-    />
-    
-    <!-- Chat panel -->
-    <Chat
-      v-if="!isLoading && !error"
-      :messages="chat.messages.value"
-      :isOpen="chat.isOpen.value"
-      :localParticipantId="participantId"
-      @send="chat.send"
-      @toggle="chat.toggle"
     />
   </div>
 </template>

@@ -4,13 +4,11 @@ import type { ChatMessage } from '@/composables/useChat'
 
 const props = defineProps<{
   messages: ChatMessage[]
-  isOpen: boolean
   localParticipantId: string | null
 }>()
 
 const emit = defineEmits<{
   send: [text: string]
-  toggle: []
 }>()
 
 const inputText = ref('')
@@ -46,31 +44,11 @@ watch(() => props.messages.length, async () => {
 </script>
 
 <template>
-  <!-- Toggle button -->
-  <button
-    data-testid="chat-toggle"
-    @click="emit('toggle')"
-    class="fixed bottom-24 right-4 p-3 rounded-full bg-gray-700 hover:bg-gray-600 transition-colors z-10"
-    title="Toggle chat"
-  >
-    <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-      <path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 9h12v2H6V9zm8 5H6v-2h8v2zm4-6H6V6h12v2z"/>
-    </svg>
-  </button>
-  
-  <!-- Chat panel -->
-  <div
-    v-if="isOpen"
-    class="fixed right-4 bottom-40 w-80 h-96 bg-gray-800 rounded-lg shadow-xl flex flex-col z-20"
-  >
+  <!-- Chat panel (always visible, part of flex layout) -->
+  <div class="flex flex-col h-full bg-gray-800 rounded-lg">
     <!-- Header -->
-    <div class="flex items-center justify-between p-3 border-b border-gray-700">
-      <span class="font-semibold">Chat</span>
-      <button @click="emit('toggle')" class="text-gray-400 hover:text-white">
-        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-          <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
-        </svg>
-      </button>
+    <div class="flex items-center p-2 border-b border-gray-700">
+      <span class="text-sm font-semibold text-gray-300">Chat</span>
     </div>
     
     <!-- Messages -->

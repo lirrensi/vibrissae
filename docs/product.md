@@ -1,4 +1,4 @@
-# VideoChat — Product Spec
+# Vibrissae — Product Spec
 
 A lightweight, ephemeral video call app. No accounts. No downloads. Open link → you're in.
 
@@ -178,7 +178,7 @@ TURN uses UDP and cannot be proxied. In both modes:
 ## Project Structure
 
 ```
-VideoChat/
+Vibrissae/
 ├── server/       # Go backend (signaling + TURN)
 ├── web_ui/       # Vue 3 frontend
 ├── docs/         # Product & architecture docs

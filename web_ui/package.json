@@ -15,10 +15,13 @@
         "lint:oxlint": "oxlint . --fix",
         "lint:eslint": "eslint . --fix --cache",
         "format": "oxfmt src/",
-        "build:server": "npm run build"
+        "build:server": "cross-env BUILD_MODE=server vite build --mode server",
+        "build:p2p": "cross-env BUILD_MODE=p2p vite build --mode p2p",
+        "build:p2p:single": "cross-env BUILD_MODE=single vite build --mode p2p"
     },
     "dependencies": {
         "pinia": "^3.0.4",
+        "trystero": "^0.21.0",
         "vue": "^3.5.28",
         "vue-router": "^5.0.3"
     },
@@ -32,6 +35,7 @@
         "@vue/eslint-config-typescript": "^14.7.0",
         "@vue/test-utils": "^2.4.6",
         "@vue/tsconfig": "^0.8.1",
+        "cross-env": "^7.0.3",
         "eslint": "^10.0.1",
         "eslint-config-prettier": "^10.1.8",
         "eslint-plugin-oxlint": "~1.49.0",
@@ -45,6 +49,7 @@
         "typescript": "~5.9.3",
         "vite": "^7.3.1",
         "vite-plugin-pwa": "^1.2.0",
+        "vite-plugin-singlefile": "^2.2.0",
         "vite-plugin-vue-devtools": "^8.0.6",
         "vitest": "^4.0.18",
         "vue-tsc": "^3.2.5"

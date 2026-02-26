@@ -1,0 +1,64 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "version": { "type": "integer", "minimum": 1 },
+    "transports": {
+      "type": "object",
+      "properties": {
+        "priority": {
+          "type": "array",
+          "items": { "enum": ["torrent", "nostr", "ipfs", "gun", "mqtt"] }
+        },
+        "torrent": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "announce": { "type": "array", "items": { "type": "string" } }
+          },
+          "required": ["enabled"]
+        },
+        "nostr": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "relays": { "type": "array", "items": { "type": "string" } }
+          },
+          "required": ["enabled"]
+        },
+        "gun": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "peers": { "type": "array", "items": { "type": "string" } }
+          },
+          "required": ["enabled"]
+        },
+        "ipfs": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "bootstrap": { "type": "array", "items": { "type": "string" } }
+          },
+          "required": ["enabled"]
+        },
+        "mqtt": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "url": { "type": "string" }
+          },
+          "required": ["enabled"]
+        }
+      }
+    },
+    "signaling": {
+      "type": "object",
+      "properties": {
+        "resendIntervalMs": { "type": "integer", "minimum": 500 },
+        "resendMaxAttempts": { "type": "integer", "minimum": 1 }
+      }
+    }
+  },
+  "required": ["version", "transports", "signaling"]
+}

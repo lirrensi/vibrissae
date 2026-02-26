@@ -13,7 +13,6 @@ export interface ChatMessage {
 export function useChat(webrtc: ReturnType<typeof useWebRTC>) {
   const store = useRoomStore()
   const messages = ref<ChatMessage[]>([])
-  const isOpen = ref(false)
   
   function generateId(): string {
     return Date.now().toString(36) + Math.random().toString(36).substr(2)
@@ -59,8 +58,6 @@ export function useChat(webrtc: ReturnType<typeof useWebRTC>) {
   
   return {
     messages,
-    isOpen,
-    send,
-    toggle: () => isOpen.value = !isOpen.value
+    send
   }
 }

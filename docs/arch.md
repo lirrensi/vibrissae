@@ -1,4 +1,4 @@
-# VideoChat — Architecture Reference
+# Vibrissae — Architecture Reference
 
 Complete technical specification for the VideoChat application.
 
@@ -23,9 +23,14 @@ VideoChat/
 │   │   │   ├── Home.vue          # Landing, generate link
 │   │   │   ├── Room.vue          # Video call view
 │   │   │   ├── VideoGrid.vue     # Participant video layout
+│   │   │   ├── VideoTile.vue     # Single video tile
 │   │   │   ├── Controls.vue      # Mic/cam/disconnect toggles
 │   │   │   ├── DeviceSelect.vue  # Camera/mic picker
+│   │   │   ├── TechLog.vue       # Connection stats & debug log
 │   │   │   └── Chat.vue          # DataChannel text chat
+│   │   ├── stores/
+│   │   │   ├── room.ts           # Room state (participants, streams)
+│   │   │   └── log.ts            # Global tech log store
 │   │   ├── composables/
 │   │   │   ├── useWebRTC.js      # WebRTC connection logic
 │   │   │   ├── useSignaling.js   # WebSocket signaling
@@ -457,14 +462,29 @@ App.vue
 ├── Home.vue              # /
 │   └── GenerateButton
 └── Room.vue              # /room/:id
-    ├── VideoGrid.vue
+    ├── VideoGrid.vue (80%)     # Left side - all video feeds
     │   └── VideoTile.vue (per participant)
-    ├── Controls.vue
-    │   ├── MicToggle
-    │   ├── CamToggle
-    │   ├── DeviceSelect.vue
-    │   └── DisconnectButton
-    └── Chat.vue
+    ├── TechLog.vue             # Right panel top - connection stats
+    ├── Chat.vue                # Right panel bottom (always visible)
+    └── Controls.vue
+        ├── MicToggle
+        ├── CamToggle
+        ├── DeviceSelect.vue
+        └── DisconnectButton
+```
+
+### Layout
+
+```
+┌────────────────────────────────────┬──────────────────┐
+│                                    │  TechLog.vue     │
+│      VideoGrid.vue                 │  (connection     │
+│      (all participants)            │   stats, events) │
+│                                    ├──────────────────┤
+│         80%                        │  Chat.vue        │
+│                                    │  (always open)   │
+│                                    │      20%         │
+└────────────────────────────────────┴──────────────────┘
 ```
 
 ### Composables
@@ -651,6 +671,46 @@ function sendMessage(text) {
   const msg = { text, timestamp: Date.now(), from: participantId.value }
   chatChannel.value.send(JSON.stringify(msg))
   messages.value.push(msg)
+}
+```
+
+### Tech Log Store
+
+Global store for connection diagnostics and debug output. Any composable can push events.
+
+```typescript
+// stores/log.ts
+interface LogEntry {
+  timestamp: Date
+  category: 'signaling' | 'webrtc' | 'ice' | 'datachannel' | 'system'
+  level: 'info' | 'warn' | 'error'
+  message: string
+  data?: object
+}
+
+const entries = ref<LogEntry[]>([])
+
+function log(category: LogEntry['category'], level: LogEntry['level'], message: string, data?: object) {
+  entries.value.push({ timestamp: new Date(), category, level, message, data })
+  // Keep last 200 entries
+  if (entries.value.length > 200) entries.value.shift()
+}
+```
+
+**Usage in composables:**
+```typescript
+// useWebRTC.ts
+import { useLogStore } from '@/stores/log'
+const log = useLogStore()
+
+pc.oniceconnectionstatechange = () => {
+  log.log('ice', 'info', `ICE state: ${pc.iceConnectionState}`, { peerId })
+}
+
+pc.onicecandidate = (event) => {
+  if (event.candidate?.type === 'relay') {
+    log.log('ice', 'info', 'Using TURN relay', { peerId })
+  }
 }
 ```
 

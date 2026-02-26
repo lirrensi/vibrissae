@@ -1,5 +1,6 @@
 import { ref, computed, onUnmounted } from 'vue'
 import { useRoomStore } from '@/stores/room'
+import { useLogStore } from '@/stores/log'
 import type { useSignaling } from './useSignaling'
 
 // Timeout for WebRTC operations (ms)
@@ -30,6 +31,7 @@ export function useWebRTC(
   signaling: ReturnType<typeof useSignaling>
 ) {
   const store = useRoomStore()
+  const logStore = useLogStore()
   const peerConnections = ref<Map<string, RTCPeerConnection>>(new Map())
   const dataChannels = ref<Map<string, RTCDataChannel>>(new Map())
   const isMuted = ref(false)
@@ -183,6 +185,10 @@ export function useWebRTC(
   }
   
   function createPeerConnection(participantId: string, isInitiator: boolean): RTCPeerConnection {
+    logStore.info('webrtc', `Creating peer connection`, { 
+      participantId: participantId.slice(0, 8), 
+      isInitiator 
+    })
     const pc = new RTCPeerConnection(rtcConfig.value)
     
     // Add local tracks
@@ -197,6 +203,12 @@ export function useWebRTC(
       const stream = event.streams[0]
       console.log(`[WebRTC] ontrack fired for ${participantId}, stream:`, stream?.id, 'tracks:', stream?.getTracks().length)
       if (!stream) return
+      
+      logStore.info('webrtc', `Remote stream received`, { 
+        participantId: participantId.slice(0, 8),
+        streamId: stream.id,
+        tracks: stream.getTracks().map(t => t.kind)
+      })
       
       store.updateParticipantStream(participantId, stream)
       
@@ -214,7 +226,23 @@ export function useWebRTC(
     // Handle ICE candidates
     pc.onicecandidate = (event) => {
       if (event.candidate) {
-        signaling.send('ice-candidate', participantId, event.candidate.toJSON())
+        const candidate = event.candidate
+        const candidateType = candidate.type || 'unknown'
+        
+        // Log relay candidates specially
+        if (candidateType === 'relay') {
+          logStore.warn('ice', `RELAY candidate (TURN)`, { 
+            participantId: participantId.slice(0, 8),
+            candidate: candidate.candidate
+          })
+        } else {
+          logStore.info('ice', `ICE candidate`, { 
+            participantId: participantId.slice(0, 8),
+            type: candidateType
+          })
+        }
+        
+        signaling.send('ice-candidate', participantId, candidate.toJSON())
       }
     }
     
@@ -222,6 +250,13 @@ export function useWebRTC(
     pc.oniceconnectionstatechange = () => {
       const state = pc.iceConnectionState
       store.updateParticipantIceState(participantId, state)
+      
+      // Log ICE state changes
+      const level = ['failed', 'disconnected'].includes(state) ? 'error' : 
+                    ['connected', 'completed'].includes(state) ? 'info' : 'warn'
+      logStore.log('ice', level as 'info' | 'warn' | 'error', `ICE state: ${state}`, { 
+        participantId: participantId.slice(0, 8) 
+      })
       
       if (['disconnected', 'failed'].includes(state)) {
         scheduleIceRestart(participantId)
@@ -248,6 +283,10 @@ export function useWebRTC(
   function setupDataChannel(participantId: string, channel: RTCDataChannel) {
     channel.onopen = () => {
       console.log(`Chat channel open with ${participantId}`)
+      logStore.info('datachannel', `DataChannel open`, { participantId: participantId.slice(0, 8) })
+    }
+    channel.onclose = () => {
+      logStore.warn('datachannel', `DataChannel closed`, { participantId: participantId.slice(0, 8) })
     }
     channel.onmessage = (event) => {
       // Emit event for chat component
