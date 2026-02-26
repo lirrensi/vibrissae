@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -15,13 +16,16 @@ import (
 // Config holds all server configuration
 type Config struct {
 	// Mode (explicit, no inference)
-	Mode string `json:"mode"` // "direct" or "proxy"
+	Mode string `json:"mode"` // "direct", "proxy", or "local"
 
 	// Direct mode
 	Domain string `json:"domain"` // Required for direct mode
 
 	// Proxy mode
 	Port int `json:"port"` // HTTP port (proxy mode)
+
+	// Local mode
+	HTTPSPort int `json:"https_port"` // HTTPS port (local mode)
 
 	// Both modes
 	TurnPort    int          `json:"turn_port"` // TURN UDP port
@@ -75,6 +79,10 @@ func (c *Config) ApplyDefaults() {
 	if c.Port == 0 {
 		c.Port = 8080
 	}
+	// Local mode uses HTTPS port by default
+	if c.Mode == "local" && c.HTTPSPort == 0 {
+		c.HTTPSPort = 8443
+	}
 	if c.TurnPort == 0 {
 		c.TurnPort = 3478
 	}
@@ -100,6 +108,10 @@ func (c *Config) ApplyDefaults() {
 	if c.Mode == "direct" && c.PublicIP == "" {
 		c.PublicIP = "auto"
 	}
+	// Local mode: default public_ip to "auto" (will resolve to local IP)
+	if c.Mode == "local" && c.PublicIP == "" {
+		c.PublicIP = "auto"
+	}
 }
 
 // Validate checks that required configuration is present
@@ -113,8 +125,11 @@ func (c *Config) Validate() error {
 		if c.PublicIP == "" {
 			return errors.New("public_ip required in proxy mode (can't auto-detect behind proxy)")
 		}
+	case "local":
+		// Local mode: no special requirements
+		// Uses self-signed certificates
 	default:
-		return errors.New("mode must be 'direct' or 'proxy'")
+		return errors.New("mode must be 'direct', 'proxy', or 'local'")
 	}
 	return nil
 }
@@ -124,15 +139,26 @@ func (c *Config) IsDirectMode() bool {
 	return c.Mode == "direct"
 }
 
+// IsLocalMode returns true if running in local mode
+func (c *Config) IsLocalMode() bool {
+	return c.Mode == "local"
+}
+
 // ResolvePublicIP resolves the public IP address
 // In direct mode with "auto", fetches from external service
+// In local mode with "auto", detects local network IP
 // Otherwise returns the configured value
 func (c *Config) ResolvePublicIP() (string, error) {
 	if c.PublicIP != "" && c.PublicIP != "auto" {
 		return c.PublicIP, nil
 	}
 
-	// Auto-detect public IP
+	// Local mode: detect local network IP
+	if c.Mode == "local" {
+		return getLocalIP()
+	}
+
+	// Auto-detect public IP (direct mode)
 	client := &http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Get("https://api.ipify.org")
 	if err != nil {
@@ -146,6 +172,24 @@ func (c *Config) ResolvePublicIP() (string, error) {
 	}
 
 	return strings.TrimSpace(string(ip)), nil
+}
+
+// getLocalIP returns the first non-loopback IPv4 address
+func getLocalIP() (string, error) {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return "", err
+	}
+
+	for _, addr := range addrs {
+		if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
+			if ipnet.IP.To4() != nil {
+				return ipnet.IP.String(), nil
+			}
+		}
+	}
+
+	return "", errors.New("no non-loopback IPv4 address found")
 }
 
 // FrontendConfig returns a sanitized config for the frontend

@@ -84,6 +84,13 @@ VideoChat/
 │  │        ├─ Listen :80 (HTTP-01 challenge)                     │ │
 │  │        └─ Listen :443 (HTTPS)                                │ │
 │  │                                                              │ │
+│  │  cfg.Mode == "local" ?                                       │ │
+│  │                                                              │ │
+│  │  YES → Local Mode                                            │ │
+│  │        ├─ Auto-detect local IP (if "auto")                   │ │
+│  │        ├─ Generate self-signed certificate                   │ │
+│  │        └─ Listen :https_port (HTTPS)                         │ │
+│  │                                                              │ │
 │  │  NO → Proxy Mode                                             │ │
 │  │        ├─ Validate public_ip is set                          │ │
 │  │        └─ Listen :port (plain HTTP)                          │ │
@@ -130,6 +137,40 @@ func startProxyMode(cfg *Config) {
 }
 ```
 
+**Local Mode:**
+```go
+func startLocalMode(cfg *Config) {
+    // Auto-detect local IP for TURN relay
+    if cfg.PublicIP == "auto" {
+        cfg.PublicIP = detectLocalIP()
+    }
+    
+    // Generate self-signed certificate
+    // Valid for: localhost, 127.0.0.1, and detected local IP
+    cert := GenerateLocalCert(cfg.PublicIP)
+    
+    // HTTPS on configured port (default 8443)
+}
+```
+
+**Local Mode Configuration:**
+```json
+{
+  "mode": "local",
+  "https_port": 8443,
+  "public_ip": "auto",
+  "turn_port": 3478,
+  "turn": { "enabled": true }
+}
+```
+
+**Local Mode Notes:**
+- Self-signed certificate is generated on first run and cached in `local_certs/`
+- Browser will show a security warning - click "Advanced" → "Proceed" to continue
+- Certificate is valid for `localhost`, `127.0.0.1`, and the detected local IP
+- Other devices on the network can connect using the local IP (e.g., `https://192.168.1.100:8443`)
+- TURN server uses the detected local IP for relay address
+
 ### HTTP Routes
 
 | Route | Handler | Description |
@@ -145,13 +186,16 @@ func startProxyMode(cfg *Config) {
 ```go
 type Config struct {
     // Mode (explicit, no inference)
-    Mode        string `json:"mode"`        // "direct" or "proxy"
+    Mode        string `json:"mode"`        // "direct", "proxy", or "local"
     
     // Direct mode
     Domain      string `json:"domain"`      // Required for direct mode
     
     // Proxy mode  
     Port        int    `json:"port"`        // HTTP port (proxy mode)
+    
+    // Local mode
+    HTTPSPort   int    `json:"https_port"`  // HTTPS port (local mode)
     
     // Both modes
     TurnPort    int    `json:"turn_port"`   // TURN UDP port
@@ -199,8 +243,9 @@ func (c *Config) Validate() error {
 **Defaults:**
 - Mode: (required, no default)
 - Port: 8080 (proxy mode)
+- HTTPSPort: 8443 (local mode)
 - TurnPort: 3478
-- PublicIP: "auto" (direct mode) / required (proxy mode)
+- PublicIP: "auto" (direct/local mode) / required (proxy mode)
 - Room TTL: 60 minutes
 - TURN enabled: true (works out of the box)
 - Rate limit: 10 concurrent connections per IP
@@ -212,6 +257,7 @@ func (c *Config) Validate() error {
 |------|------|-------|------------|
 | Direct | :80 | :443 | :turn_port |
 | Proxy | :port | (reverse proxy) | :turn_port |
+| Local | — | :https_port | :turn_port |
 
 ### Room Management (`room.go`)
 

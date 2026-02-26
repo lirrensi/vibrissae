@@ -30,6 +30,9 @@ config.json
 config.local.json
 *.local.json
 
+# Local development certificates
+local_certs/
+
 # IDE
 .vscode/
 .idea/

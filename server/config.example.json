@@ -1,7 +1,30 @@
 {
-  "mode": "proxy",
+  "_comment": "VideoChat Configuration - See docs/arch.md for details",
+  "_modes": {
+    "direct": "Production with Let's Encrypt (requires domain, ports 80/443)",
+    "proxy": "Behind reverse proxy (requires public_ip, plain HTTP)",
+    "local": "Local development with self-signed HTTPS (auto-detects IP)"
+  },
+  
+  "mode": "local",
+  
+  "_direct_mode": {
+    "domain": "call.example.com"
+  },
+  
+  "_proxy_mode": {
+    "port": 8080,
+    "public_ip": "1.2.3.4"
+  },
+  
+  "_local_mode": {
+    "https_port": 8443,
+    "public_ip": "auto"
+  },
+  
   "port": 8080,
-  "public_ip": "1.2.3.4",
+  "https_port": 8443,
+  "public_ip": "auto",
   "turn_port": 3478,
   "base_url": "",
   "room_ttl_minutes": 60,
@@ -9,7 +32,7 @@
     "enabled": true,
     "rate_limit_per_ip": 10,
     "credential_ttl_minutes": 30,
-    "secret": "your-secret-here-change-in-production"
+    "secret": ""
   },
   "turn_servers": []
 }

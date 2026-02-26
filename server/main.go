@@ -73,12 +73,21 @@ func main() {
 
 	// Static files (SPA)
 	spaHandler := NewSPAHandler(cfg)
+
+	// For local mode, set the local IP for TURN configuration
+	if cfg.IsLocalMode() {
+		spaHandler.SetLocalIP(publicIP)
+	}
+
 	mux.Handle("/", spaHandler)
 
 	// Mode-specific startup
-	if cfg.IsDirectMode() {
+	switch {
+	case cfg.IsDirectMode():
 		startDirectMode(cfg, mux)
-	} else {
+	case cfg.IsLocalMode():
+		startLocalMode(cfg, mux, publicIP)
+	default:
 		startProxyMode(cfg, mux)
 	}
 }
@@ -180,6 +189,58 @@ func startProxyMode(cfg *Config, handler http.Handler) {
 
 	if err := server.ListenAndServe(); err != http.ErrServerClosed {
 		log.Fatalf("Server error: %v", err)
+	}
+
+	log.Println("Server stopped")
+}
+
+// startLocalMode runs the server with self-signed HTTPS certificate
+func startLocalMode(cfg *Config, handler http.Handler, localIP string) {
+	// Generate self-signed certificate
+	cert, err := GenerateLocalCert(localIP)
+	if err != nil {
+		log.Fatalf("Failed to generate local certificate: %v", err)
+	}
+	log.Printf("Generated self-signed certificate in %s/", LocalCertDir)
+
+	// Create HTTPS server
+	server := &http.Server{
+		Addr:         fmt.Sprintf(":%d", cfg.HTTPSPort),
+		Handler:      handler,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
+		TLSConfig: &tls.Config{
+			MinVersion: tls.VersionTLS12,
+		},
+	}
+
+	// Graceful shutdown
+	go func() {
+		sigChan := make(chan os.Signal, 1)
+		signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+		<-sigChan
+
+		log.Println("Shutting down...")
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		server.Shutdown(ctx)
+	}()
+
+	log.Printf("VideoChat starting in LOCAL mode")
+	log.Printf("HTTPS server: https://localhost:%d", cfg.HTTPSPort)
+	log.Printf("HTTPS server: https://%s:%d", localIP, cfg.HTTPSPort)
+	log.Printf("WebSocket endpoint: wss://localhost:%d/ws/{roomId}", cfg.HTTPSPort)
+	if cfg.Turn.Enabled {
+		log.Printf("TURN server: udp://%s:%d", localIP, cfg.TurnPort)
+	}
+	log.Println("")
+	log.Println("NOTE: This is a self-signed certificate. Your browser will show a security warning.")
+	log.Println("      Click 'Advanced' -> 'Proceed to localhost (unsafe)' to continue.")
+	log.Printf("      Certificate files: %s, %s", cert.CertFile, cert.KeyFile)
+
+	if err := server.ListenAndServeTLS(cert.CertFile, cert.KeyFile); err != http.ErrServerClosed {
+		log.Fatalf("HTTPS server error: %v", err)
 	}
 
 	log.Println("Server stopped")

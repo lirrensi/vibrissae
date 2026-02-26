@@ -13,6 +13,7 @@ import (
 type SPAHandler struct {
 	staticFS http.FileSystem
 	config   *Config
+	localIP  string // Resolved local IP for local mode
 }
 
 // NewSPAHandler creates a new SPA handler
@@ -22,7 +23,13 @@ func NewSPAHandler(config *Config) *SPAHandler {
 	return &SPAHandler{
 		staticFS: getStaticFS(),
 		config:   config,
+		localIP:  "", // Will be set via SetLocalIP if needed
 	}
+}
+
+// SetLocalIP sets the local IP for local mode
+func (h *SPAHandler) SetLocalIP(ip string) {
+	h.localIP = ip
 }
 
 // ServeHTTP serves static files or index.html for SPA routing
@@ -78,6 +85,13 @@ func (h *SPAHandler) serveIndexWithConfig(w http.ResponseWriter, r *http.Request
 
 	// Build config JSON
 	configData := h.config.FrontendConfig(creds)
+
+	// For local mode, use the resolved local IP as baseUrl for TURN
+	// This ensures TURN server address is correct even when accessing via localhost
+	if h.config.IsLocalMode() && h.localIP != "" {
+		configData["baseUrl"] = h.localIP
+	}
+
 	configJSON, err := json.Marshal(configData)
 	if err != nil {
 		log.Printf("Failed to marshal config: %v", err)
