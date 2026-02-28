@@ -43,6 +43,10 @@ export function resetP2PConfigCache(): void {
   _cachedConfig = null
 }
 
+// Build constants - injected at compile time by Vite
+declare const __BUILD_MODE__: string
+declare const __P2P_CONFIG__: string | null
+
 export async function loadP2PConfig(): Promise<P2PConfig> {
   // Return cached config if available
   if (_cachedConfig) {
@@ -52,18 +56,30 @@ export async function loadP2PConfig(): Promise<P2PConfig> {
   const logStore = useLogStore()
   let config: P2PConfig
 
-  // In single-file mode, import the bundled config (inlined at build time)
-  if (typeof __BUILD_MODE__ !== 'undefined' && __BUILD_MODE__ === 'single') {
-    const bundledConfig = await import('../../public/p2p-config.json')
-    logStore.info('signaling', 'Single-file mode: using bundled P2P config')
-    config = mergeWithDefaults(bundledConfig as Partial<P2PConfig>)
+  // SINGLE MODE: Config is embedded in the bundle at build time
+  // NO network fetch - guaranteed to work on GitHub Pages
+  if (__BUILD_MODE__ === 'single' && __P2P_CONFIG__) {
+    try {
+      const bundledConfig = JSON.parse(__P2P_CONFIG__)
+      logStore.info('signaling', 'Single-file mode: using embedded P2P config')
+      config = mergeWithDefaults(bundledConfig as Partial<P2PConfig>)
+    } catch (err) {
+      // This should NEVER happen - config is embedded at build time
+      const msg = 'FATAL: Failed to parse embedded P2P config'
+      logStore.error('signaling', msg, err)
+      throw new Error(msg)
+    }
   } else {
-    // In normal P2P mode, fetch external config
-    // Add timestamp to bust any cached 404 responses
-    const cacheBuster = `?t=${Date.now()}`
+    // P2P mode: fetch external config with aggressive cache-busting
+    const cacheBuster = `?v=${Date.now()}-${Math.random().toString(36).slice(2)}`
     try {
       const response = await fetch(`/p2p-config.json${cacheBuster}`, {
-        cache: 'no-store'
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        }
       })
 
       if (response.ok) {

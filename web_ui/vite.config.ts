@@ -4,6 +4,17 @@ import vue from '@vitejs/plugin-vue'
 import vueDevTools from 'vite-plugin-vue-devtools'
 import { VitePWA } from 'vite-plugin-pwa'
 import { viteSingleFile } from 'vite-plugin-singlefile'
+import { readFileSync, existsSync } from 'node:fs'
+import { resolve } from 'node:path'
+
+// Read P2P config file for single-file builds - injects directly into bundle
+function readP2PConfig(): string {
+  const configPath = resolve(__dirname, 'public/p2p-config.json')
+  if (existsSync(configPath)) {
+    return readFileSync(configPath, 'utf-8')
+  }
+  throw new Error('FATAL: public/p2p-config.json not found. Required for single-file build.')
+}
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
@@ -58,7 +69,10 @@ export default defineConfig(({ mode }) => {
       }
     },
     define: {
-      __BUILD_MODE__: JSON.stringify(process.env.BUILD_MODE || 'default')
+      __BUILD_MODE__: JSON.stringify(process.env.BUILD_MODE || 'default'),
+      // In single-file mode, embed P2P config directly in the bundle - NO runtime fetch
+      // This guarantees the config is always present in the GitHub Pages build
+      __P2P_CONFIG__: isSingleFile ? readP2PConfig() : 'null'
     }
   }
 
