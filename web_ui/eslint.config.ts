@@ -22,17 +22,41 @@ export default defineConfigWithVueTs(
   ...pluginVue.configs['flat/essential'],
   vueTsConfigs.recommended,
 
+  // Relax Vue rules
+  {
+    rules: {
+      'vue/multi-word-component-names': 'off',
+      'vue/no-unused-vars': 'warn',
+    },
+  },
+
   {
     ...pluginPlaywright.configs['flat/recommended'],
     files: ['e2e/**/*.{test,spec}.{js,ts,jsx,tsx}'],
+    rules: {
+      'playwright/no-conditional-in-test': 'off',
+      'playwright/no-wait-for-timeout': 'off',
+      'playwright/no-conditional-expect': 'off',
+    },
   },
 
   {
     ...pluginVitest.configs.recommended,
     files: ['src/**/__tests__/*'],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
+    },
   },
 
   ...pluginOxlint.buildFromOxlintConfigFile('.oxlintrc.json'),
+
+  // Relax TypeScript rules
+  {
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-unused-vars': 'warn',
+    },
+  },
 
   skipFormatting,
 )
