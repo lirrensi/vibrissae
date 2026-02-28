@@ -150,6 +150,13 @@ export function createTrysteroTransport(options: TrysteroTransportOptions): Sign
         if (!data || typeof data !== 'object') return
 
         const msg = data as unknown as SignalingMessage
+        
+        // Log all incoming messages
+        logStore.info('signaling', `Received ${msg.type} via ${type}`, { 
+          from: msg.from?.slice(0, 8),
+          to: msg.to?.slice(0, 8),
+          trysteroPeer: trysteroPeerId.slice(0, 8)
+        })
 
         // Handle P2P handshake
         if (msg.type === 'hello') {
@@ -158,7 +165,13 @@ export function createTrysteroTransport(options: TrysteroTransportOptions): Sign
         }
 
         // For other messages, filter by recipient
-        if (msg.to && msg.to !== participantId.value) return
+        if (msg.to && msg.to !== participantId.value) {
+          logStore.info('signaling', `Ignoring message not for us`, { 
+            targetTo: msg.to.slice(0, 8), 
+            ourId: participantId.value!.slice(0, 8) 
+          })
+          return
+        }
 
         // Enrich with from field (look up participantId from map)
         const map = peerIdMaps.get(type)
@@ -275,7 +288,13 @@ export function createTrysteroTransport(options: TrysteroTransportOptions): Sign
       from: participantId.value!
     }
 
-    // Send to all active transports (broadcast - Trystero will route to correct peer if 'to' is set)
+    // Log outgoing message
+    logStore.info('signaling', `Sending ${message.type}`, { 
+      to: message.to?.slice(0, 8),
+      from: participantId.value!.slice(0, 8)
+    })
+
+    // Send to all active transports (broadcast - receiver filters by 'to')
     activeTransports.forEach(({ send }, type) => {
       try {
         send(enriched as unknown as SignalPayload)

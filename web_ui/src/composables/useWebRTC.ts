@@ -47,7 +47,16 @@ export function useWebRTC(
     const config: RTCConfiguration = { iceServers: [] }
     const appConfig = window.__CONFIG__
     
-    if (!appConfig) return config
+    // P2P mode: use default STUN servers
+    if (!appConfig) {
+      config.iceServers = [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' }
+      ]
+      return config
+    }
+    
+    // Server mode: use configured ICE servers
     
     // External TURN servers (priority)
     if (appConfig.turnServers) {
