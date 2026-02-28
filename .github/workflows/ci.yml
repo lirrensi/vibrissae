@@ -1,118 +1,118 @@
-# name: CI
+name: CI
 
-# on:
-#   push:
-#     branches: [master, main]
-#   pull_request:
-#     branches: [master, main]
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
 
-# jobs:
-#   # Frontend tests and build
-#   frontend:
-#     runs-on: ubuntu-latest
+jobs:
+  # Frontend tests and build
+  frontend:
+    runs-on: ubuntu-latest
     
-#     steps:
-#       - name: Checkout
-#         uses: actions/checkout@v4
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
         
-#       - name: Setup Node.js
-#         uses: actions/setup-node@v4
-#         with:
-#           node-version: '22'
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
           
-#       - name: Setup pnpm
-#         uses: pnpm/action-setup@v4
-#         with:
-#           version: 9
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
           
-#       - name: Install dependencies
-#         working-directory: web_ui
-#         run: pnpm install --frozen-lockfile
+      - name: Install dependencies
+        working-directory: web_ui
+        run: pnpm install --frozen-lockfile
         
-#       - name: Type check
-#         working-directory: web_ui
-#         run: pnpm type-check
+      - name: Type check
+        working-directory: web_ui
+        run: pnpm type-check
         
-#       - name: Lint
-#         working-directory: web_ui
-#         run: pnpm lint
+      - name: Lint
+        working-directory: web_ui
+        run: pnpm lint
         
-#       - name: Run unit tests
-#         working-directory: web_ui
-#         run: pnpm test:unit --run
+      - name: Run unit tests
+        working-directory: web_ui
+        run: pnpm test:unit --run
         
-#       - name: Build P2P
-#         working-directory: web_ui
-#         run: pnpm build:p2p
+      - name: Build P2P
+        working-directory: web_ui
+        run: pnpm build:p2p
         
-#       - name: Upload P2P build artifact
-#         uses: actions/upload-pages-artifact@v3
-#         with:
-#           path: web_ui/dist
+      - name: Upload P2P build artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: web_ui/dist
 
-#   # Go server tests and build
-#   server:
-#     runs-on: ubuntu-latest
+  # Go server tests and build
+  server:
+    runs-on: ubuntu-latest
     
-#     steps:
-#       - name: Checkout
-#         uses: actions/checkout@v4
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
         
-#       - name: Setup Go
-#         uses: actions/setup-go@v5
-#         with:
-#           go-version: '1.22'
-#           cache-dependency-path: server/go.sum
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache-dependency-path: server/go.sum
           
-#       - name: Download dependencies
-#         working-directory: server
-#         run: go mod download
+      - name: Download dependencies
+        working-directory: server
+        run: go mod download
         
-#       - name: Run tests
-#         working-directory: server
-#         run: go test -v -race ./...
+      - name: Run tests
+        working-directory: server
+        run: go test -v ./...
         
-#       - name: Build
-#         working-directory: server
-#         run: go build -v -o vibrissae .
+      - name: Build
+        working-directory: server
+        run: go build -v -o vibrissae .
 
-#   # E2E tests (requires built frontend) - optional, doesn't block
-#   e2e:
-#     needs: frontend
-#     runs-on: ubuntu-latest
-#     if: github.event_name == 'pull_request'
-#     continue-on-error: true
+  # E2E tests (requires built frontend) - optional, doesn't block
+  e2e:
+    needs: frontend
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    continue-on-error: true
     
-#     steps:
-#       - name: Checkout
-#         uses: actions/checkout@v4
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
         
-#       - name: Setup Node.js
-#         uses: actions/setup-node@v4
-#         with:
-#           node-version: '22'
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
           
-#       - name: Setup pnpm
-#         uses: pnpm/action-setup@v4
-#         with:
-#           version: 9
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
           
-#       - name: Install dependencies
-#         working-directory: web_ui
-#         run: pnpm install --frozen-lockfile
+      - name: Install dependencies
+        working-directory: web_ui
+        run: pnpm install --frozen-lockfile
         
-#       - name: Install Playwright browsers
-#         working-directory: web_ui
-#         run: npx playwright install --with-deps chromium
+      - name: Install Playwright browsers
+        working-directory: web_ui
+        run: npx playwright install --with-deps chromium
         
-#       - name: Run E2E tests
-#         working-directory: web_ui
-#         run: pnpm test:e2e
+      - name: Run E2E tests
+        working-directory: web_ui
+        run: pnpm test:e2e
         
-#       - name: Upload Playwright report
-#         uses: actions/upload-artifact@v4
-#         if: always()
-#         with:
-#           name: playwright-report
-#           path: web_ui/playwright-report/
-#           retention-days: 30
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: web_ui/playwright-report/
+          retention-days: 30

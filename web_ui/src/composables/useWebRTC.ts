@@ -127,12 +127,17 @@ async function tryGetAudio(deviceId?: string): Promise<boolean> {
       
       // Replace audio track in peer connections
       const newAudioTrack = stream.getAudioTracks()[0]!
-      peerConnections.value.forEach(pc => {
+      peerConnections.value.forEach((pc, participantId) => {
         const sender = pc.getSenders().find(s => s.track?.kind === 'audio')
+        const wasTrackAdded = !sender
         if (sender) {
           sender.replaceTrack(newAudioTrack)
         } else {
           pc.addTrack(newAudioTrack, store.localStream!)
+        }
+        // If we added a NEW audio track (not replacement), trigger renegotiation
+        if (wasTrackAdded) {
+          triggerRenegotiation(participantId, pc)
         }
       })
       
@@ -177,12 +182,17 @@ async function tryGetVideo(deviceId?: string): Promise<boolean> {
       
       // Replace video track in peer connections
       const newVideoTrack = stream.getVideoTracks()[0]!
-      peerConnections.value.forEach(pc => {
+      peerConnections.value.forEach((pc, participantId) => {
         const sender = pc.getSenders().find(s => s.track?.kind === 'video')
+        const wasTrackAdded = !sender
         if (sender) {
           sender.replaceTrack(newVideoTrack)
         } else {
           pc.addTrack(newVideoTrack, store.localStream!)
+        }
+        // If we added a NEW video track (not replacement), trigger renegotiation
+        if (wasTrackAdded) {
+          triggerRenegotiation(participantId, pc)
         }
       })
       
@@ -379,6 +389,28 @@ function createPeerConnection(participantId: string, isInitiator: boolean): RTCP
     const pc = peerConnections.value.get(participantId)
     if (pc) {
       pc.addIceCandidate(new RTCIceCandidate(candidate))
+    }
+  }
+  
+  // Trigger renegotiation by creating and sending a new offer
+  // Needed when adding a new track to an existing peer connection
+  async function triggerRenegotiation(participantId: string, pc: RTCPeerConnection) {
+    logStore.info('webrtc', 'Triggering renegotiation for new track', { participantId: participantId.slice(0, 8) })
+    try {
+      const offer = await withTimeout(
+        pc.createOffer(),
+        WEBRTC_TIMEOUT,
+        'Timeout creating renegotiation offer'
+      )
+      await withTimeout(
+        pc.setLocalDescription(offer),
+        WEBRTC_TIMEOUT,
+        'Timeout setting local description for renegotiation'
+      )
+      signaling.send('offer', participantId, { sdp: offer.sdp, type: offer.type })
+      logStore.info('webrtc', 'Renegotiation offer sent', { participantId: participantId.slice(0, 8) })
+    } catch (err) {
+      logStore.error('webrtc', 'Renegotiation failed', err)
     }
   }
   

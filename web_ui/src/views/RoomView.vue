@@ -197,20 +197,22 @@ function leave() {
 </script>
 
 <template>
-  <div class="min-h-screen flex flex-col bg-gray-900">
+  <div class="h-screen flex flex-col bg-gray-900 overflow-hidden">
     <!-- Header -->
-    <header class="flex items-center justify-between p-4 border-b border-gray-800">
-      <h1 class="text-xl font-semibold">Vibrissae</h1>
-      <ConnectionStatus 
-        :signaling="signaling.connected.value"
-        :signalingOffline="signaling.signalingOffline.value"
-        :reconnectExhausted="signaling.reconnectExhausted.value"
-        :participants="store.participants"
-      />
+    <header class="flex-none p-4 border-b border-gray-800">
+      <div class="flex items-center justify-between">
+        <h1 class="text-xl font-semibold">Vibrissae</h1>
+        <ConnectionStatus 
+          :signaling="signaling.connected.value"
+          :signalingOffline="signaling.signalingOffline.value"
+          :reconnectExhausted="signaling.reconnectExhausted.value"
+          :participants="store.participants"
+        />
+      </div>
     </header>
     
     <!-- Main content -->
-    <main class="flex-1 flex min-h-0">
+    <main class="flex-1 flex min-h-0 overflow-hidden">
       <!-- Loading state -->
       <div v-if="isLoading" class="flex items-center justify-center h-full w-full">
         <div class="text-center">
@@ -232,7 +234,7 @@ function leave() {
       <!-- Call view with 80/20 split -->
       <template v-else>
         <!-- Left: VideoGrid (80%) -->
-        <div class="flex-[8] relative min-w-0">
+        <div class="flex-[8] relative min-w-0 overflow-hidden">
           <VideoGrid
             :localStream="localStream"
             :participants="participants"
@@ -250,11 +252,11 @@ function leave() {
         </div>
         
         <!-- Right: TechLog + Chat (20%) -->
-        <div class="flex-[2] min-w-[280px] max-w-[400px] flex flex-col gap-2 p-2 border-l border-gray-800">
-          <div class="flex-1 min-h-0">
+        <div class="flex-[2] min-w-[280px] max-w-[400px] flex flex-col gap-2 p-2 border-l border-gray-800 overflow-hidden">
+          <div class="flex-1 min-h-0 overflow-hidden">
             <TechLog />
           </div>
-          <div class="flex-1 min-h-0">
+          <div class="flex-1 min-h-0 overflow-hidden">
             <Chat
               :messages="chat.messages.value"
               :localParticipantId="participantId"

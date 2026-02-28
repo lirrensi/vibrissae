@@ -46,8 +46,8 @@ Do you want to run your own server?
 ### How It Works
 
 1. **Signaling**: Uses [Trystero](https://github.com/dmotz/trystero) for serverless peer discovery via public decentralized networks
-2. **Media**: Direct browser-to-browser WebRTC connections using public STUN servers
-3. **No TURN**: Relies on STUN for NAT traversal; may fail with symmetric NAT
+2. **Media**: Direct browser-to-browser WebRTC connections using ICE servers from `p2p-config.json`
+3. **Hybrid NAT traversal**: STUN for direct connections, TURN relay as fallback (when available in config)
 
 ### Deployment Options
 
@@ -63,8 +63,8 @@ Trystero supports multiple decentralized backends. All enabled backends connect 
 
 | Backend | Bundle Size | Notes |
 |---------|-------------|-------|
-| **BitTorrent** | 5K | WebTorrent trackers — default, most reliable |
-| **Nostr** | 8K | Decentralized relays — good redundancy |
+| **Nostr** | 8K | Decentralized relays — prioritized, good redundancy |
+| **BitTorrent** | 5K | WebTorrent trackers — fallback option |
 | **MQTT** | 75K | Public MQTT brokers |
 | **IPFS** | 119K | DHT-based discovery |
 
@@ -79,7 +79,7 @@ P2P behavior is controlled by `p2p-config.json` (optional — defaults work out 
 {
   "version": 1,
   "transports": {
-    "priority": ["torrent", "nostr"],
+    "priority": ["nostr", "torrent"],
     "torrent": {
       "enabled": true,
       "announce": ["wss://tracker.openwebtorrent.com"]
@@ -88,13 +88,20 @@ P2P behavior is controlled by `p2p-config.json` (optional — defaults work out 
       "enabled": true,
       "relays": ["wss://relay.damus.io"]
     }
-  }
+  },
+  "iceServers": [
+    { "urls": "stun:stun.l.google.com:19302" },
+    { "urls": "stun:stun1.l.google.com:19302" },
+    { "urls": "turn:your-turn-server.com:3478", "username": "user", "credential": "pass" }
+  ]
 }
 ```
 
+**ICE Servers**: The config defines STUN/TURN servers used for NAT traversal. At least one STUN server is required; TURN servers are optional but recommended for users behind symmetric NAT.
+
 ### Limitations
 
-- **No TURN relay**: Calls may fail with symmetric NAT or restrictive firewalls
+- **TURN optional**: Calls may fail with symmetric NAT if no TURN servers configured
 - **Best-effort connectivity**: Works for most users, not guaranteed for all
 - **No server-side features**: No room persistence, no admin controls
 

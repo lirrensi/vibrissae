@@ -1,5 +1,7 @@
 # Vibrissae
 
+Full p2p video calls without fuckery. 
+
 [![CI](https://github.com/lirrensi/vibrissae/actions/workflows/ci.yml/badge.svg)](https://github.com/lirrensi/vibrissae/actions/workflows/ci.yml)
 [![Deploy to Pages](https://github.com/lirrensi/vibrissae/actions/workflows/deploy-pages.yml/badge.svg)](https://github.com/lirrensi/vibrissae/actions/workflows/deploy-pages.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)

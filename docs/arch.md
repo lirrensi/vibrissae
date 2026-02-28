@@ -357,10 +357,12 @@ When no server is available (Web Bundle mode), Vibrissae uses Trystero for serve
 
 | Backend | Import | Bundle Size | Config Key |
 |---------|--------|-------------|------------|
-| **BitTorrent** | `trystero/torrent` | 5K | `torrent` |
 | **Nostr** | `trystero/nostr` | 8K | `nostr` |
+| **BitTorrent** | `trystero/torrent` | 5K | `torrent` |
 | **MQTT** | `trystero/mqtt` | 75K | `mqtt` |
 | **IPFS** | `trystero/ipfs` | 119K | `ipfs` |
+
+**Priority**: Nostr is prioritized over BitTorrent per product requirements.
 
 ### P2P Config Schema
 
@@ -375,10 +377,11 @@ interface P2PConfig {
     mqtt?: MQTTConfig
     ipfs?: IPFSConfig
   }
-  signaling: {
+  signaling?: {
     resendIntervalMs: number
     resendMaxAttempts: number
   }
+  iceServers?: RTCIceServer[]
 }
 
 type TransportType = 'torrent' | 'nostr' | 'mqtt' | 'ipfs'
@@ -390,7 +393,7 @@ type TransportType = 'torrent' | 'nostr' | 'mqtt' | 'ipfs'
 {
   "version": 1,
   "transports": {
-    "priority": ["torrent", "nostr"],
+    "priority": ["nostr", "torrent"],
     "torrent": {
       "enabled": true,
       "announce": ["wss://tracker.openwebtorrent.com", "wss://tracker.webtorrent.dev"]
@@ -400,12 +403,16 @@ type TransportType = 'torrent' | 'nostr' | 'mqtt' | 'ipfs'
       "relays": ["wss://relay.damus.io", "wss://nos.lol"]
     }
   },
-  "signaling": {
-    "resendIntervalMs": 3000,
-    "resendMaxAttempts": 10
-  }
+  "iceServers": [
+    { "urls": "stun:stun.l.google.com:19302" },
+    { "urls": "stun:stun1.l.google.com:19302" },
+    { "urls": "stun:stun2.l.google.com:19302" }
+    // ... more STUN/TURN servers
+  ]
 }
 ```
+
+**ICE Servers**: Must include at least one STUN server. TURN servers are optional but recommended for NAT traversal in restrictive network environments. Loaded via `getIceServers()` utility.
 
 ### Happy Eyeballs Connection
 
@@ -430,6 +437,54 @@ export async function loadP2PConfig(): Promise<P2PConfig> {
   // 2. Fall back to inlined default config
   // 3. Merge with defaults for partial configs
 }
+
+// ICE servers loading
+export function getIceServers(): Promise<RTCIceServer[]> {
+  // Returns iceServers from config, or defaults
+}
+```
+
+### P2P Handshake Protocol
+
+In P2P mode (Web Bundle), we use a custom handshake over Trystero's data rooms:
+
+```
+Peer A                      Trystero Data Room                      Peer B
+  │                               │                                   │
+  │──── hello (participantId) ───>│──── hello (participantId) ──────>│
+  │<─── hello (participantId) ────│<─── hello (participantId) ──────│
+  │                               │                                   │
+  │  Compare UUIDs: smaller = initiator                              │
+  │                               │                                   │
+  │==== WebRTC Offer (initiator) ====================================>│
+  │<=== WebRTC Answer (non-initiator) ===============================│
+  │                               │                                   │
+  │================ ICE Candidates =================================>│
+  │<=============== ICE Candidates ==================================│
+```
+
+**Key Implementation Details:**
+
+1. **Hello Exchange**: Both peers broadcast a hello message containing their `participantId` (UUID)
+2. **Initiator Election**: Peer with lexicographically smaller UUID initiates the WebRTC connection
+3. **Self-Message Filtering**: TrysteroTransport filters out messages where `participantId` matches our own
+4. **participantId Sync**: The participantId is synced to the room store for consistency across components
+
+**Why custom handshake?** Trystero provides peer discovery but not the structured signaling flow needed for WebRTC. We layer our own protocol on top of Trystero's action/room system.
+
+```typescript
+// TrysteroTransport.ts - Hello message format
+interface HelloMessage {
+  type: 'hello'
+  participantId: string
+  initiatorId: string  // Will be determined after both hellos received
+}
+
+// On receiving hello:
+- Store the peer's participantId
+- Compare our participantId with peer's to determine initiator
+- If we are initiator, call webrtc.initiateConnection(peerId)
+- If not initiator, wait for offer from peer
 ```
 
 ---
@@ -663,6 +718,40 @@ pc.oniceconnectionstatechange = () => {
   }
 }
 ```
+
+### Track Renegotiation
+
+When adding a NEW track (video or audio) to an already-established peer connection, renegotiation is required:
+
+```typescript
+// useWebRTC.ts - tryGetVideo() example
+peerConnections.value.forEach((pc, participantId) => {
+  const sender = pc.getSenders().find(s => s.track?.kind === 'video')
+  const wasTrackAdded = !sender  // Track added (not replaced)?
+  
+  if (sender) {
+    sender.replaceTrack(newVideoTrack)
+  } else {
+    pc.addTrack(newVideoTrack, store.localStream!)
+  }
+  
+  // If NEW track, trigger renegotiation
+  if (wasTrackAdded) {
+    triggerRenegotiation(participantId, pc)
+  }
+})
+
+async function triggerRenegotiation(participantId, pc) {
+  const offer = await pc.createOffer()
+  await pc.setLocalDescription(offer)
+  signaling.send('offer', participantId, offer)
+}
+```
+
+**Why needed:** WebRTC requires a new SDP offer/answer exchange when adding new media tracks to an existing connection. This handles:
+- User enables camera AFTER joining a call
+- User enables microphone AFTER joining a call
+- Switching to a different camera/mic device
 
 ### DataChannel Chat
 
