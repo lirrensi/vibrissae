@@ -327,18 +327,19 @@ function createPeerConnection(participantId: string, isInitiator: boolean): RTCP
   }
   
   async function handleOffer(participantId: string, offer: RTCSessionDescriptionInit) {
-    console.log(`[WebRTC] handleOffer called for: ${participantId}`)
+    console.log(`[WebRTC] handleOffer called for: ${participantId}, offer type: ${offer.type}`)
     let pc = peerConnections.value.get(participantId)
     if (!pc) {
       console.log(`[WebRTC] Creating new peer connection for: ${participantId}`)
       pc = createPeerConnection(participantId, false)
     }
     
-    // Race condition guard: don't overwrite existing remote description
-    if (pc.remoteDescription) {
-      console.warn(`[WebRTC] Ignoring offer from ${participantId} - remote description already set`)
-      return
-    }
+    // Log existing state for debugging
+    const hadRemoteDesc = !!pc.remoteDescription
+    console.log(`[WebRTC] Existing remote description: ${hadRemoteDesc ? 'yes' : 'no'}`)
+    
+    // Note: We allow setting remote description even if one exists - 
+    // this is needed for renegotiation (adding video tracks to existing connections)
     
     try {
       console.log(`[WebRTC] Setting remote description for: ${participantId}`)

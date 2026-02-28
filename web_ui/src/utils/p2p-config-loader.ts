@@ -59,9 +59,11 @@ export async function loadP2PConfig(): Promise<P2PConfig> {
     config = mergeWithDefaults(bundledConfig as Partial<P2PConfig>)
   } else {
     // In normal P2P mode, fetch external config
+    // Add timestamp to bust any cached 404 responses
+    const cacheBuster = `?t=${Date.now()}`
     try {
-      const response = await fetch('/p2p-config.json', {
-        cache: 'no-cache'
+      const response = await fetch(`/p2p-config.json${cacheBuster}`, {
+        cache: 'no-store'
       })
 
       if (response.ok) {
