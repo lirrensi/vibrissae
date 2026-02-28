@@ -1,7 +1,7 @@
 import { useLogStore } from '@/stores/log'
 import type { P2PConfig, TorrentConfig, NostrConfig, MQTTConfig, IPFSConfig } from '@/types/p2p-config'
 
-// Default config inlined for single-file builds
+// Fallback defaults (used when external config not found)
 const defaultConfig: P2PConfig = {
   version: 1,
   transports: {
@@ -30,12 +30,17 @@ const defaultConfig: P2PConfig = {
 export async function loadP2PConfig(): Promise<P2PConfig> {
   const logStore = useLogStore()
 
-  // In single-file mode, fetch might fail (no external file)
+  // In single-file mode, import the bundled config (inlined at build time)
+  if (typeof __BUILD_MODE__ !== 'undefined' && __BUILD_MODE__ === 'single') {
+    const bundledConfig = await import('../../public/p2p-config.json')
+    logStore.info('signaling', 'Single-file mode: using bundled P2P config')
+    return mergeWithDefaults(bundledConfig as Partial<P2PConfig>)
+  }
+
   // In normal P2P mode, fetch external config
   try {
-    // Try to fetch external config first
     const response = await fetch('/p2p-config.json', {
-      cache: 'no-cache' // Always get latest
+      cache: 'no-cache'
     })
 
     if (response.ok) {
@@ -47,7 +52,6 @@ export async function loadP2PConfig(): Promise<P2PConfig> {
     logStore.info('signaling', 'External P2P config not found, using default')
   }
 
-  // Return default inlined config
   return defaultConfig
 }
 

@@ -2,7 +2,7 @@
   "$schema": "./p2p-config.schema.json",
   "version": 1,
   "transports": {
-    "priority": ["torrent", "nostr"],
+    "priority": ["nostr", "torrent", "mqtt", "ipfs"],
     "torrent": {
       "enabled": true,
       "announce": [
