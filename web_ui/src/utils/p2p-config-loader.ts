@@ -45,7 +45,8 @@ export function resetP2PConfigCache(): void {
 
 // Build constants - injected at compile time by Vite
 declare const __BUILD_MODE__: string
-declare const __P2P_CONFIG__: string | null
+// In single mode, __P2P_CONFIG__ is the config object (Vite define replaces it directly)
+declare const __P2P_CONFIG__: P2PConfig | null
 
 export async function loadP2PConfig(): Promise<P2PConfig> {
   // Return cached config if available
@@ -59,16 +60,8 @@ export async function loadP2PConfig(): Promise<P2PConfig> {
   // SINGLE MODE: Config is embedded in the bundle at build time
   // NO network fetch - guaranteed to work on GitHub Pages
   if (__BUILD_MODE__ === 'single' && __P2P_CONFIG__) {
-    try {
-      const bundledConfig = JSON.parse(__P2P_CONFIG__)
-      logStore.info('signaling', 'Single-file mode: using embedded P2P config')
-      config = mergeWithDefaults(bundledConfig as Partial<P2PConfig>)
-    } catch (err) {
-      // This should NEVER happen - config is embedded at build time
-      const msg = 'FATAL: Failed to parse embedded P2P config'
-      logStore.error('signaling', msg, { error: err instanceof Error ? err.message : String(err) })
-      throw new Error(msg)
-    }
+    logStore.info('signaling', 'Single-file mode: using embedded P2P config')
+    config = mergeWithDefaults(__P2P_CONFIG__ as Partial<P2PConfig>)
   } else {
     // P2P mode: fetch external config with aggressive cache-busting
     const cacheBuster = `?v=${Date.now()}-${Math.random().toString(36).slice(2)}`
