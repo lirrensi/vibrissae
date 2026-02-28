@@ -43,9 +43,9 @@ jobs:
         working-directory: web_ui
         run: pnpm install --frozen-lockfile
         
-      - name: Build P2P bundle
+      - name: Build P2P single-file bundle
         working-directory: web_ui
-        run: pnpm build:p2p
+        run: pnpm build:p2p:single
         
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
