@@ -57,13 +57,25 @@ export function createTrysteroTransport(options: TrysteroTransportOptions): Sign
           relayUrls: nc.relays ?? []
         }
       }
-      case 'gun': {
-        const gc = config.transports.gun
-        if (!gc?.enabled) return null
+      case 'mqtt': {
+        const mc = config.transports.mqtt
+        if (!mc?.enabled) return null
         return {
           ...base,
-          // gunPeers is passed as a custom property
-          ...({ gunPeers: gc.peers ?? [] } as Record<string, unknown>)
+          relayUrls: mc.url ? [mc.url] : [
+            'wss://public.mqtthq.com',
+            'wss://broker.hivemq.com',
+            'wss://mqtt.eclipseprojects.io'
+          ]
+        }
+      }
+      case 'ipfs': {
+        const ic = config.transports.ipfs
+        if (!ic?.enabled) return null
+        return {
+          ...base,
+          // IPFS uses default bootstrap nodes if not specified
+          ...(ic.bootstrap ? { bootstrap: ic.bootstrap } : {})
         }
       }
       default:
@@ -225,12 +237,10 @@ function isTransportEnabled(type: TransportType, config: P2PConfig): boolean {
       return config.transports.torrent?.enabled ?? false
     case 'nostr':
       return config.transports.nostr?.enabled ?? false
-    case 'gun':
-      return config.transports.gun?.enabled ?? false
-    case 'ipfs':
-      return config.transports.ipfs?.enabled ?? false
     case 'mqtt':
       return config.transports.mqtt?.enabled ?? false
+    case 'ipfs':
+      return config.transports.ipfs?.enabled ?? false
     default:
       return false
   }

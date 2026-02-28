@@ -16,7 +16,7 @@ export default defineConfig(({ mode }) => {
       vueDevTools(),
       VitePWA({
         registerType: 'autoUpdate',
-        includeAssets: ['favicon.ico'],
+        includeAssets: ['favicon.ico', 'icon.svg'],
         manifest: {
           name: 'Vibrissae',
           short_name: 'Vibrissae',
@@ -25,6 +25,7 @@ export default defineConfig(({ mode }) => {
           background_color: '#1f2937',
           display: 'standalone',
           icons: [
+            { src: 'icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
             { src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' },
             { src: 'pwa-512x512.png', sizes: '512x512', type: 'image/png' }
           ]

@@ -1,73 +1,85 @@
-# vite-project
+# Vibrissae Web UI
 
-This template should help get you started developing with Vue 3 in Vite.
+Vue 3 frontend for Vibrissae — a lightweight WebRTC video calling application.
 
-## Recommended IDE Setup
-
-[VS Code](https://code.visualstudio.com/) + [Vue (Official)](https://marketplace.visualstudio.com/items?itemName=Vue.volar) (and disable Vetur).
-
-## Recommended Browser Setup
-
-- Chromium-based browsers (Chrome, Edge, Brave, etc.):
-  - [Vue.js devtools](https://chromewebstore.google.com/detail/vuejs-devtools/nhdogjmejiglipccpnnnanhbledajbpd)
-  - [Turn on Custom Object Formatter in Chrome DevTools](http://bit.ly/object-formatters)
-- Firefox:
-  - [Vue.js devtools](https://addons.mozilla.org/en-US/firefox/addon/vue-js-devtools/)
-  - [Turn on Custom Object Formatter in Firefox DevTools](https://fxdx.dev/firefox-devtools-custom-object-formatters/)
-
-## Type Support for `.vue` Imports in TS
-
-TypeScript cannot handle type information for `.vue` imports by default, so we replace the `tsc` CLI with `vue-tsc` for type checking. In editors, we need [Volar](https://marketplace.visualstudio.com/items?itemName=Vue.volar) to make the TypeScript language service aware of `.vue` types.
-
-## Customize configuration
-
-See [Vite Configuration Reference](https://vite.dev/config/).
-
-## Project Setup
+## Quick Start
 
 ```sh
 pnpm install
-```
-
-### Compile and Hot-Reload for Development
-
-```sh
 pnpm dev
 ```
 
-### Type-Check, Compile and Minify for Production
+## Build Commands
+
+| Command | Purpose |
+|---------|---------|
+| `pnpm build:p2p` | Build for static hosting (GitHub Pages, Netlify) |
+| `pnpm build:p2p:single` | Build as single HTML file |
+| `pnpm build:server` | Build for Go server embedding |
+
+## Development
 
 ```sh
-pnpm build
+pnpm dev              # Start dev server
+pnpm type-check       # Run TypeScript checks
+pnpm lint             # Run linters (oxlint + eslint)
+pnpm test:unit        # Run Vitest unit tests
+pnpm test:e2e         # Run Playwright E2E tests
 ```
 
-### Run Unit Tests with [Vitest](https://vitest.dev/)
+## Project Structure
+
+```
+src/
+├── components/       # Vue components
+│   ├── Chat.vue
+│   ├── Controls.vue
+│   ├── VideoGrid.vue
+│   └── ...
+├── composables/      # Vue composables
+│   ├── useWebRTC.ts
+│   ├── useSignaling.ts
+│   └── ...
+├── transports/       # Signaling transport implementations
+│   ├── TrysteroTransport.ts   # P2P mode (decentralized)
+│   ├── WebSocketTransport.ts  # Self-hosted mode
+│   └── factory.ts             # Auto-detects mode
+├── stores/           # Pinia stores
+├── types/            # TypeScript types
+└── utils/            # Utility functions
+```
+
+## PWA Icons
+
+The app uses an SVG icon (`public/icon.svg`) for PWA. To generate PNG icons:
+
+```sh
+# Using ImageMagick or similar
+convert public/icon.svg -resize 192x192 public/pwa-192x192.png
+convert public/icon.svg -resize 512x512 public/pwa-512x512.png
+convert public/icon.svg -resize 32x32 public/favicon.ico
+```
+
+Or use an online tool like [RealFaviconGenerator](https://realfavicongenerator.net/).
+
+## Testing
+
+### Unit Tests (Vitest)
 
 ```sh
 pnpm test:unit
 ```
 
-### Run End-to-End Tests with [Playwright](https://playwright.dev)
+### E2E Tests (Playwright)
 
 ```sh
-# Install browsers for the first run
+# Install browsers first
 npx playwright install
 
-# When testing on CI, must build the project first
-pnpm build
-
-# Runs the end-to-end tests
 pnpm test:e2e
-# Runs the tests only on Chromium
-pnpm test:e2e --project=chromium
-# Runs the tests of a specific file
-pnpm test:e2e tests/example.spec.ts
-# Runs the tests in debug mode
-pnpm test:e2e --debug
 ```
 
-### Lint with [ESLint](https://eslint.org/)
+## See Also
 
-```sh
-pnpm lint
-```
+- [Product Specification](../docs/product.md)
+- [Architecture Reference](../docs/arch.md)

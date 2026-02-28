@@ -4,9 +4,8 @@ export interface P2PConfig {
     priority: TransportType[]
     torrent?: TorrentConfig
     nostr?: NostrConfig
-    gun?: GunConfig
-    ipfs?: IPFSConfig
     mqtt?: MQTTConfig
+    ipfs?: IPFSConfig
   }
   signaling: {
     resendIntervalMs: number
@@ -14,7 +13,7 @@ export interface P2PConfig {
   }
 }
 
-export type TransportType = 'torrent' | 'nostr' | 'gun' | 'ipfs' | 'mqtt'
+export type TransportType = 'torrent' | 'nostr' | 'mqtt' | 'ipfs'
 
 export interface TorrentConfig {
   enabled: boolean
@@ -26,17 +25,12 @@ export interface NostrConfig {
   relays?: string[]
 }
 
-export interface GunConfig {
+export interface MQTTConfig {
   enabled: boolean
-  peers?: string[]
+  url?: string
 }
 
 export interface IPFSConfig {
   enabled: boolean
   bootstrap?: string[]
-}
-
-export interface MQTTConfig {
-  enabled: boolean
-  url?: string
 }

@@ -4,6 +4,41 @@ Complete technical specification for the VideoChat application.
 
 ---
 
+## Overview
+
+Vibrissae is a WebRTC video calling application with two operating modes:
+
+| Mode | Signaling Transport | Media Relay | Build Command |
+|------|---------------------|-------------|---------------|
+| **Web Bundle** | Trystero (P2P) | STUN only | `npm run build:p2p` |
+| **Self-Hosted** | WebSocket | Built-in TURN | `npm run build:server` |
+
+The same Vue frontend codebase supports both modes via a transport factory that auto-detects the deployment context.
+
+---
+
+## Scope Boundary
+
+**This system owns:**
+- WebRTC connection management (offers, answers, ICE candidates)
+- Signaling via WebSocket or Trystero
+- TURN relay server (Self-Hosted mode)
+- Room lifecycle management
+- Frontend UI for video calls
+
+**This system does NOT own:**
+- User authentication (deliberately none)
+- Persistent storage (deliberately ephemeral)
+- Media mixing/SFU (P2P mesh architecture)
+- External TURN services (can be configured, not provided)
+
+**Boundary interfaces:**
+- Frontend ↔ Signaling Transport (abstract interface)
+- Signaling Transport ↔ Network (WebSocket or Trystero)
+- Server ↔ TURN Server (embedded, same process)
+
+---
+
 ## Project Structure
 
 ```
@@ -14,7 +49,8 @@ VideoChat/
 │   ├── room.go       # Room management (sync.Map, TTL, cleanup)
 │   ├── signaling.go  # WebSocket handler for SDP/ICE exchange
 │   ├── turn.go       # Embedded TURN server (pion/turn)
-│   └── auth.go       # HMAC credential generation
+│   ├── auth.go       # HMAC credential generation
+│   └── cert.go       # Self-signed cert generation (local mode)
 ├── web_ui/           # Vue 3 frontend
 │   ├── src/
 │   │   ├── App.vue
@@ -33,11 +69,23 @@ VideoChat/
 │   │   │   └── log.ts            # Global tech log store
 │   │   ├── composables/
 │   │   │   ├── useWebRTC.js      # WebRTC connection logic
-│   │   │   ├── useSignaling.js   # WebSocket signaling
+│   │   │   ├── useSignaling.js   # Signaling abstraction
 │   │   │   └── useDevices.js     # Media device enumeration
-│   │   └── utils/
-│   │       └── uuid.js           # UUID generation
-│   ├── vite.config.js
+│   │   ├── transports/
+│   │   │   ├── index.ts          # Re-exports
+│   │   │   ├── factory.ts        # Auto-detects mode, creates transport
+│   │   │   ├── WebSocketTransport.ts  # Server-hosted signaling
+│   │   │   └── TrysteroTransport.ts   # P2P signaling (multi-backend)
+│   │   ├── utils/
+│   │   │   ├── uuid.js           # UUID generation
+│   │   │   └── p2p-config-loader.ts  # Load P2P config
+│   │   └── types/
+│   │       ├── transport.ts      # SignalingTransport interface
+│   │       └── p2p-config.ts     # P2P config types
+│   ├── public/
+│   │   ├── p2p-config.json       # P2P configuration
+│   │   └── p2p-config.schema.json
+│   ├── vite.config.ts
 │   └── package.json
 ├── docs/
 │   ├── product.md    # Human-readable product spec
@@ -59,7 +107,109 @@ VideoChat/
 | Build Tool | Vite | 5.x |
 | Styling | Tailwind CSS | CDN |
 | PWA | `vite-plugin-pwa` | 0.x |
+| P2P Signaling | Trystero | 0.21.x |
 | WebRTC | Browser Native API | — |
+
+---
+
+## Build Modes
+
+The frontend supports multiple build targets:
+
+| Command | Output | Use Case |
+|---------|--------|----------|
+| `npm run build:p2p` | `dist/` folder | Static hosting (GitHub Pages, Netlify) |
+| `npm run build:p2p:single` | Single `index.html` | Offline use, shareable file |
+| `npm run build:server` | `server/dist/` (embedded) | Self-Hosted binary |
+
+### Build Mode Detection
+
+```typescript
+// vite.config.ts
+const isSingleFile = process.env.BUILD_MODE === 'single'
+const isServer = mode === 'server'
+```
+
+- `BUILD_MODE=p2p` → Standard P2P build with chunked output
+- `BUILD_MODE=single` → Single HTML file with inlined assets
+- `BUILD_MODE=server` → Output to `server/dist/` for Go embedding
+
+---
+
+## Transport Architecture
+
+### SignalingTransport Interface
+
+Both WebSocket and Trystero transports implement the same interface:
+
+```typescript
+// types/transport.ts
+interface SignalingTransport {
+  // Connection state
+  connected: boolean
+  participantId: string | null
+  
+  // Events
+  onJoin: (callback: JoinCallback) => void
+  onPeerJoined: (callback: PeerJoinedCallback) => void
+  onPeerLeft: (callback: PeerLeftCallback) => void
+  onOffer: (callback: OfferCallback) => void
+  onAnswer: (callback: AnswerCallback) => void
+  onIceCandidate: (callback: IceCandidateCallback) => void
+  onError: (callback: ErrorCallback) => void
+  
+  // Actions
+  connect(): Promise<void>
+  sendOffer(to: string, offer: RTCSessionDescriptionInit): void
+  sendAnswer(to: string, answer: RTCSessionDescriptionInit): void
+  sendIceCandidate(to: string, candidate: RTCIceCandidateInit): void
+  disconnect(): void
+}
+```
+
+### Transport Factory
+
+Auto-detects operating mode and creates appropriate transport:
+
+```typescript
+// transports/factory.ts
+export type TransportMode = 'auto' | 'websocket' | 'p2p'
+
+export async function createTransport(options: CreateTransportOptions): Promise<SignalingTransport> {
+  const { roomId, mode = 'auto' } = options
+  
+  const effectiveMode = determineMode(mode)
+  
+  switch (effectiveMode) {
+    case 'websocket':
+      return createWebSocketTransport(roomId)
+    case 'p2p':
+      const config = await loadP2PConfig()
+      return createTrysteroTransport({ roomId, config })
+  }
+}
+
+function determineMode(requestedMode: TransportMode): 'websocket' | 'p2p' {
+  if (requestedMode === 'websocket') return 'websocket'
+  if (requestedMode === 'p2p') return 'p2p'
+  
+  // Auto-detect: server-injected config means WebSocket mode
+  if (window.__CONFIG__) {
+    return 'websocket'
+  }
+  
+  return 'p2p'
+}
+```
+
+### Mode Detection Logic
+
+| Condition | Transport |
+|-----------|-----------|
+| `mode: 'websocket'` | WebSocket (explicit) |
+| `mode: 'p2p'` | Trystero (explicit) |
+| `mode: 'auto'` + `window.__CONFIG__` exists | WebSocket (Self-Hosted) |
+| `mode: 'auto'` + no `window.__CONFIG__` | Trystero (Web Bundle) |
 
 ---
 
@@ -109,73 +259,6 @@ VideoChat/
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-**Direct Mode:**
-```go
-func startDirectMode(cfg *Config) {
-    // Resolve public IP for TURN relay
-    if cfg.PublicIP == "auto" {
-        cfg.PublicIP = detectPublicIP()
-    }
-    
-    // Setup autocert
-    certManager := autocert.Manager{
-        Prompt:     autocert.AcceptTOS,
-        HostPolicy: autocert.HostWhitelist(cfg.Domain),
-        Cache:      autocert.DirCache("certs"),
-    }
-    
-    // HTTP server on :80 (redirect + ACME challenge)
-    // HTTPS server on :443
-}
-```
-
-**Proxy Mode:**
-```go
-func startProxyMode(cfg *Config) {
-    // Validate public_ip is set (TURN needs it)
-    if cfg.PublicIP == "" {
-        log.Fatal("public_ip required in proxy mode")
-    }
-    
-    // Plain HTTP on configured port
-    // Trust X-Forwarded-* headers
-}
-```
-
-**Local Mode:**
-```go
-func startLocalMode(cfg *Config) {
-    // Auto-detect local IP for TURN relay
-    if cfg.PublicIP == "auto" {
-        cfg.PublicIP = detectLocalIP()
-    }
-    
-    // Generate self-signed certificate
-    // Valid for: localhost, 127.0.0.1, and detected local IP
-    cert := GenerateLocalCert(cfg.PublicIP)
-    
-    // HTTPS on configured port (default 8443)
-}
-```
-
-**Local Mode Configuration:**
-```json
-{
-  "mode": "local",
-  "https_port": 8443,
-  "public_ip": "auto",
-  "turn_port": 3478,
-  "turn": { "enabled": true }
-}
-```
-
-**Local Mode Notes:**
-- Self-signed certificate is generated on first run and cached in `local_certs/`
-- Browser will show a security warning - click "Advanced" → "Proceed" to continue
-- Certificate is valid for `localhost`, `127.0.0.1`, and the detected local IP
-- Other devices on the network can connect using the local IP (e.g., `https://192.168.1.100:8443`)
-- TURN server uses the detected local IP for relay address
-
 ### HTTP Routes
 
 | Route | Handler | Description |
@@ -185,8 +268,9 @@ func startLocalMode(cfg *Config) {
 | `GET /room/{id}` | `embeddedFS` | SPA handles routing |
 | `WS /ws/{id}` | `signalingHandler` | WebSocket signaling |
 | `GET /health` | `healthHandler` | Health check endpoint |
+| `GET /stats` | `statsHandler` | Room count and TURN status |
 
-### Config Loading (`config.go`)
+### Config Schema (`config.go`)
 
 ```go
 type Config struct {
@@ -202,9 +286,9 @@ type Config struct {
     // Local mode
     HTTPSPort   int    `json:"https_port"`  // HTTPS port (local mode)
     
-    // Both modes
+    // All modes
     TurnPort    int    `json:"turn_port"`   // TURN UDP port
-    PublicIP    string `json:"public_ip"`   // "auto" or explicit IP for TURN relay
+    PublicIP    string `json:"public_ip"`   // "auto" or explicit IP
     BaseURL     string `json:"base_url"`
     RoomTTLMins int          `json:"room_ttl_minutes"`
     Turn        TurnConfig   `json:"turn"`
@@ -217,15 +301,10 @@ type TurnConfig struct {
     CredentialTTLMin  int    `json:"credential_ttl_minutes"`
     Secret            string `json:"secret"`
 }
-
-type TurnServer struct {
-    URLs       string `json:"urls"`
-    Username   string `json:"username,omitempty"`
-    Credential string `json:"credential,omitempty"`
-}
 ```
 
-**Mode Validation:**
+### Mode Validation
+
 ```go
 func (c *Config) Validate() error {
     switch c.Mode {
@@ -233,30 +312,34 @@ func (c *Config) Validate() error {
         if c.Domain == "" {
             return errors.New("domain required in direct mode")
         }
-        // PublicIP defaults to "auto"
     case "proxy":
-        if c.PublicIP == "" {
-            return errors.New("public_ip required in proxy mode")
+        if c.PublicIP == "" || c.PublicIP == "auto" {
+            return errors.New("public_ip required in proxy mode (cannot be 'auto')")
         }
+    case "local":
+        // No additional validation required
     default:
-        return errors.New("mode must be 'direct' or 'proxy'")
+        return errors.New("mode must be 'direct', 'proxy', or 'local'")
     }
     return nil
 }
 ```
 
-**Defaults:**
-- Mode: (required, no default)
-- Port: 8080 (proxy mode)
-- HTTPSPort: 8443 (local mode)
-- TurnPort: 3478
-- PublicIP: "auto" (direct/local mode) / required (proxy mode)
-- Room TTL: 60 minutes
-- TURN enabled: true (works out of the box)
-- Rate limit: 10 concurrent connections per IP
-- Credential TTL: 30 minutes
+### Defaults
 
-**Port Summary:**
+| Field | Default |
+|-------|---------|
+| Mode | (required, no default) |
+| Port | 8080 (proxy mode) |
+| HTTPSPort | 8443 (local mode) |
+| TurnPort | 3478 |
+| PublicIP | "auto" (direct/local mode) / required (proxy mode) |
+| Room TTL | 60 minutes |
+| TURN enabled | true |
+| Rate limit | 10 concurrent connections per IP |
+| Credential TTL | 30 minutes |
+
+### Port Summary
 
 | Mode | HTTP | HTTPS | TURN (UDP) |
 |------|------|-------|------------|
@@ -264,7 +347,94 @@ func (c *Config) Validate() error {
 | Proxy | :port | (reverse proxy) | :turn_port |
 | Local | — | :https_port | :turn_port |
 
-### Room Management (`room.go`)
+---
+
+## P2P Signaling (Trystero)
+
+When no server is available (Web Bundle mode), Vibrissae uses Trystero for serverless P2P signaling.
+
+### Supported Backends
+
+| Backend | Import | Bundle Size | Config Key |
+|---------|--------|-------------|------------|
+| **BitTorrent** | `trystero/torrent` | 5K | `torrent` |
+| **Nostr** | `trystero/nostr` | 8K | `nostr` |
+| **MQTT** | `trystero/mqtt` | 75K | `mqtt` |
+| **IPFS** | `trystero/ipfs` | 119K | `ipfs` |
+
+### P2P Config Schema
+
+```typescript
+// types/p2p-config.ts
+interface P2PConfig {
+  version: number
+  transports: {
+    priority: TransportType[]
+    torrent?: TorrentConfig
+    nostr?: NostrConfig
+    mqtt?: MQTTConfig
+    ipfs?: IPFSConfig
+  }
+  signaling: {
+    resendIntervalMs: number
+    resendMaxAttempts: number
+  }
+}
+
+type TransportType = 'torrent' | 'nostr' | 'mqtt' | 'ipfs'
+```
+
+### Default Configuration
+
+```json
+{
+  "version": 1,
+  "transports": {
+    "priority": ["torrent", "nostr"],
+    "torrent": {
+      "enabled": true,
+      "announce": ["wss://tracker.openwebtorrent.com", "wss://tracker.webtorrent.dev"]
+    },
+    "nostr": {
+      "enabled": true,
+      "relays": ["wss://relay.damus.io", "wss://nos.lol"]
+    }
+  },
+  "signaling": {
+    "resendIntervalMs": 3000,
+    "resendMaxAttempts": 10
+  }
+}
+```
+
+### Happy Eyeballs Connection
+
+All enabled transports connect in parallel. First successful connection wins:
+
+```typescript
+// TrysteroTransport.ts
+const promises = config.transports.priority.map(async (type) => {
+  if (isTransportEnabled(type, config)) {
+    await connectTransport(type)
+  }
+})
+Promise.all(promises)
+```
+
+### Config Loading
+
+```typescript
+// utils/p2p-config-loader.ts
+export async function loadP2PConfig(): Promise<P2PConfig> {
+  // 1. Try fetch /p2p-config.json
+  // 2. Fall back to inlined default config
+  // 3. Merge with defaults for partial configs
+}
+```
+
+---
+
+## Room Management (`room.go`)
 
 ```go
 type Room struct {
@@ -289,9 +459,11 @@ var rooms sync.Map // map[string]*Room
 - `Broadcast(roomID, participantID string, msg Message)`
 - `CleanupExpiredRooms()` — runs every minute via goroutine
 
-### Signaling Protocol (`signaling.go`)
+---
 
-**WebSocket Message Format:**
+## Signaling Protocol (`signaling.go`)
+
+### WebSocket Message Format
 
 ```typescript
 interface SignalingMessage {
@@ -307,17 +479,17 @@ interface JoinAckPayload {
   roomId: string;
   turnCredentials?: { username: string; password: string; };
   existingPeers: string[];
-  initiatorId: string;  // who initiates connections
+  initiatorId: string;
 }
 
 // peer-joined payload  
 interface PeerJoinedPayload {
   participantId: string;
-  initiatorId: string;  // who should initiate to this new peer
+  initiatorId: string;
 }
 ```
 
-**Message Flow:**
+### Message Flow
 
 ```
 Participant A                Server                Participant B
@@ -337,34 +509,22 @@ Participant A                Server                Participant B
      │<─── peer-left ──────────│                         │
 ```
 
-**Connection Lifecycle:**
-1. Client connects to `WS /ws/{roomID}`
-2. Server assigns participant ID
-3. Server sends `join-ack` with ID and TURN credentials
-4. Server broadcasts `peer-joined` to existing participants
-5. Server relays offers/answers/ICE candidates between participants
-6. On disconnect, server broadcasts `peer-left`
-
 ### Initiator Assignment
 
-To prevent race conditions where both peers try to initiate simultaneously, the server 
-designates a single "initiator" for each connection:
+To prevent race conditions where both peers try to initiate simultaneously:
 
-- **On join:** If room was empty, new participant is initiator. Otherwise, the 
-  longest-connected existing participant becomes initiator.
+- **On join:** If room was empty, new participant is initiator. Otherwise, the longest-connected existing participant becomes initiator.
 - **On peer-joined:** Server tells existing participants who should initiate to the newcomer.
-- **When initiator leaves:** The next longest-connected participant automatically becomes 
-  the new initiator (server recalculates on each join).
+- **When initiator leaves:** The next longest-connected participant automatically becomes the new initiator.
 
-This ensures exactly one peer initiates each WebRTC connection, preventing the "stable" 
-state conflict that occurs when both sides create offers simultaneously.
+---
 
-### TURN Server (`turn.go`)
+## TURN Server (`turn.go`)
 
 Uses `pion/turn` embedded in the binary. **Cannot be proxied** — requires direct UDP access.
 
 ```go
-func NewEmbeddedTurnServer(cfg TurnConfig, publicIP string, port int) *turn.Server {
+func NewEmbeddedTurnServer(cfg TurnConfig, publicIP string, port int) *EmbeddedTurnServer {
     // Listen on 0.0.0.0:port (UDP)
     // Advertise publicIP for relay address
     // Rate limiting per IP
@@ -372,7 +532,8 @@ func NewEmbeddedTurnServer(cfg TurnConfig, publicIP string, port int) *turn.Serv
 }
 ```
 
-**Relay Address Configuration:**
+### Relay Address Configuration
+
 ```go
 RelayAddressGenerator: &turn.RelayAddressGeneratorStatic{
     RelayAddress: net.ParseIP(publicIP),  // What clients connect to
@@ -380,20 +541,11 @@ RelayAddressGenerator: &turn.RelayAddressGeneratorStatic{
 }
 ```
 
-**Public IP Resolution:**
-- Direct mode: `public_ip: "auto"` → HTTP request to external service
-- Proxy mode: `public_ip` must be set manually
-
-**Rate Limiting:**
-- Map of IP → connection count
-- Checked on new TURN allocation
-- Decremented on disconnect
-
 ### HMAC Authentication (`auth.go`)
 
 ```go
 func GenerateTurnCredentials(roomID, secret string, ttlMinutes int) (username, password string) {
-    timestamp := time.Now().Unix() / 60 // minute precision
+    timestamp := time.Now().Unix() / 60
     username = fmt.Sprintf("%d:%s", timestamp, roomID)
     mac := hmac.New(sha256.New, []byte(secret))
     mac.Write([]byte(username))
@@ -402,24 +554,9 @@ func GenerateTurnCredentials(roomID, secret string, ttlMinutes int) (username, p
 }
 ```
 
-**Validation:**
-- Parse timestamp from username
-- Reject if outside TTL window
-- Verify HMAC
-- Extract roomID for scoping
-
 ---
 
 ## Frontend Architecture
-
-### Entry Point (`main.js`)
-
-```javascript
-import { createApp } from 'vue'
-import App from './App.vue'
-
-createApp(App).mount('#app')
-```
 
 ### Config Injection
 
@@ -433,18 +570,8 @@ Server injects config in `index.html`:
 }</script>
 ```
 
-**GitHub Pages Mode:**
-Config baked at build time in `vite.config.js`:
-```javascript
-define: {
-  __CONFIG__: JSON.stringify({
-    baseUrl: "https://user.github.io/videochat",
-    stunServers: ["stun:stun.l.google.com:19302", ...]
-  })
-}
-```
-
-**Note:** `turn.port` is separate from HTTP port since TURN uses UDP directly.
+**Web Bundle Mode:**
+No server injection. Transport factory detects absence of `window.__CONFIG__` and uses Trystero.
 
 ### Routing
 
@@ -487,108 +614,6 @@ App.vue
 └────────────────────────────────────┴──────────────────┘
 ```
 
-### Composables
-
-#### `useWebRTC.js`
-
-```javascript
-export function useWebRTC(roomId) {
-  const localStream = ref(null)
-  const remoteStreams = ref(new Map()) // participantId -> MediaStream
-  const peerConnections = ref(new Map()) // participantId -> RTCPeerConnection
-  const dataChannels = ref(new Map()) // participantId -> RTCDataChannel
-
-  // Initialize local media
-  async function startLocalStream(deviceId?) {}
-  
-  // Create peer connection for new participant
-  function createPeerConnection(participantId, isInitiator) {}
-  
-  // Handle incoming SDP
-  async function handleOffer(participantId, offer) {}
-  async function handleAnswer(participantId, answer) {}
-  
-  // Handle ICE candidates
-  function handleIceCandidate(participantId, candidate) {}
-  
-  // Toggle media
-  function toggleVideo() {}
-  function toggleAudio() {}
-  
-  // Switch devices
-  function switchVideoDevice(deviceId) {}
-  function switchAudioDevice(deviceId) {}
-  
-  // Cleanup
-  function disconnect() {}
-  
-  return { localStream, remoteStreams, ... }
-}
-```
-
-#### `useSignaling.js`
-
-```javascript
-export function useSignaling(roomId) {
-  const ws = ref(null)
-  const participantId = ref(null)
-  const participants = ref([])
-  const connected = ref(false)
-
-  function connect() {
-    ws.value = new WebSocket(`${wsBaseUrl}/ws/${roomId}`)
-    // Message handling
-    // Reconnection logic
-  }
-  
-  function send(type, to, payload) {}
-  
-  function onMessage(callback) {}
-  
-  function disconnect() {}
-  
-  return { participantId, participants, connected, ... }
-}
-```
-
-**Reconnection Logic:**
-```javascript
-const reconnectAttempts = ref(0)
-const maxReconnectAttempts = 10
-const baseDelay = 1000 // ms
-
-function handleDisconnect() {
-  if (p2pEstablished) {
-    // Don't reconnect, just show indicator
-    signalingOffline.value = true
-    return
-  }
-  
-  if (reconnectAttempts.value < maxReconnectAttempts) {
-    const delay = baseDelay * Math.pow(2, reconnectAttempts.value)
-    setTimeout(connect, delay)
-    reconnectAttempts.value++
-  }
-}
-```
-
-#### `useDevices.js`
-
-```javascript
-export function useDevices() {
-  const cameras = ref([])
-  const microphones = ref []
-  const selectedCamera = ref(null)
-  const selectedMicrophone = ref(null)
-
-  async function enumerateDevices() {}
-  
-  async function getInitialDevices() {}
-  
-  return { cameras, microphones, ... }
-}
-```
-
 ### WebRTC Configuration
 
 ```javascript
@@ -600,7 +625,7 @@ const rtcConfig = computed(() => {
     config.iceServers.push(...window.__CONFIG__.turn_servers)
   }
   
-  // Built-in TURN
+  // Built-in TURN (Self-Hosted mode)
   if (window.__CONFIG__.turn?.enabled) {
     config.iceServers.push({
       urls: `turn:${window.__CONFIG__.baseUrl}:${window.__CONFIG__.turn.port}`,
@@ -632,7 +657,6 @@ async function restartIce(participantId) {
   signaling.send('offer', participantId, offer)
 }
 
-// Triggered on iceConnectionStateChange → 'disconnected' or 'failed'
 pc.oniceconnectionstatechange = () => {
   if (['disconnected', 'failed'].includes(pc.iceConnectionState)) {
     restartIce(participantId)
@@ -660,57 +684,10 @@ pc.ondatachannel = (event) => {
   }
 }
 
-function setupChatHandlers() {
-  chatChannel.value.onopen = () => console.log('Chat connected')
-  chatChannel.value.onmessage = (event) => {
-    messages.value.push(JSON.parse(event.data))
-  }
-}
-
 function sendMessage(text) {
   const msg = { text, timestamp: Date.now(), from: participantId.value }
   chatChannel.value.send(JSON.stringify(msg))
   messages.value.push(msg)
-}
-```
-
-### Tech Log Store
-
-Global store for connection diagnostics and debug output. Any composable can push events.
-
-```typescript
-// stores/log.ts
-interface LogEntry {
-  timestamp: Date
-  category: 'signaling' | 'webrtc' | 'ice' | 'datachannel' | 'system'
-  level: 'info' | 'warn' | 'error'
-  message: string
-  data?: object
-}
-
-const entries = ref<LogEntry[]>([])
-
-function log(category: LogEntry['category'], level: LogEntry['level'], message: string, data?: object) {
-  entries.value.push({ timestamp: new Date(), category, level, message, data })
-  // Keep last 200 entries
-  if (entries.value.length > 200) entries.value.shift()
-}
-```
-
-**Usage in composables:**
-```typescript
-// useWebRTC.ts
-import { useLogStore } from '@/stores/log'
-const log = useLogStore()
-
-pc.oniceconnectionstatechange = () => {
-  log.log('ice', 'info', `ICE state: ${pc.iceConnectionState}`, { peerId })
-}
-
-pc.onicecandidate = (event) => {
-  if (event.candidate?.type === 'relay') {
-    log.log('ice', 'info', 'Using TURN relay', { peerId })
-  }
 }
 ```
 
@@ -731,19 +708,18 @@ cd server && go run .
 ### Production Build
 
 ```bash
-# Build Vue app
-cd web_ui && npm run build
+# Web Bundle (P2P mode)
+cd web_ui && npm run build:p2p
+# Output: dist/ folder for static hosting
 
-# Build Go binary (embeds dist/)
+# Web Bundle Single File
+cd web_ui && npm run build:p2p:single
+# Output: dist/index.html (single file)
+
+# Self-Hosted
+cd web_ui && npm run build:server
 cd server && go build -o videochat .
-```
-
-### GitHub Pages Build
-
-```bash
-# Build with public config
-cd web_ui && VITE_MODE=github-pages npm run build
-# Output to docs/ for GitHub Pages
+# Output: single binary with embedded frontend
 ```
 
 ---
@@ -801,6 +777,19 @@ cd web_ui && VITE_MODE=github-pages npm run build
 | RAM per room | ~1MB |
 | Time to first frame | < 5s |
 | Signaling latency | < 100ms |
+
+---
+
+## Design Decisions
+
+| Decision | Why | Confidence |
+|----------|-----|------------|
+| Trystero for P2P signaling | No server required, multiple fallback backends | High |
+| P2P mesh (no SFU) | Simplicity, works for small groups | High |
+| Embedded TURN | Single binary, no external dependencies | High |
+| No persistence | Privacy, simplicity | High |
+| Transport factory pattern | Same codebase for both modes | High |
+| BitTorrent as default P2P backend | Most reliable, smallest bundle | Medium |
 
 ---
 

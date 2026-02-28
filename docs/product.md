@@ -6,12 +6,209 @@ A lightweight, ephemeral video call app. No accounts. No downloads. Open link �
 
 ## What It Is
 
-A WebRTC-based video calling tool designed for simplicity and self-hosting. Two deployment modes:
+A WebRTC-based video calling tool designed for simplicity and self-hosting. Two **operating modes** with fundamentally different infrastructure requirements:
 
-| Mode | Deployment | Use Case |
-|------|------------|----------|
-| **Public Demo** | GitHub Pages static SPA | Try it out, send grandma a link |
-| **Self-Hosted** | Single Go binary | Private, reliable, you control it |
+| Mode | Server Required | Signaling | Media Relay | Best For |
+|------|-----------------|-----------|-------------|----------|
+| **Web Bundle** | No | Trystero (decentralized) | STUN only | Quick demo, casual use, zero setup |
+| **Self-Hosted** | Yes | WebSocket server | Built-in TURN | Production, private, reliable calls |
+
+---
+
+## Quick Start Decision Tree
+
+```
+Do you want to run your own server?
+│
+├─ NO → Use Web Bundle mode
+│        ├─ Host on GitHub Pages, Netlify, any static host
+│        ├─ Or just open the single HTML file locally
+│        └─ Works for most NAT configurations
+│
+└─ YES → Use Self-Hosted mode
+         │
+         ├─ Fresh VPS with a domain?
+         │  └─ Use "direct" config (Let's Encrypt auto-cert)
+         │
+         ├─ Behind nginx/Caddy/Cloudflare?
+         │  └─ Use "proxy" config (you handle TLS)
+         │
+         └─ Local network testing?
+            └─ Use "local" config (self-signed cert)
+```
+
+---
+
+## Operating Mode 1: Web Bundle (Pure P2P)
+
+**No server required.** The entire app is a static web bundle that can be hosted anywhere or opened locally.
+
+### How It Works
+
+1. **Signaling**: Uses [Trystero](https://github.com/dmotz/trystero) for serverless peer discovery via public decentralized networks
+2. **Media**: Direct browser-to-browser WebRTC connections using public STUN servers
+3. **No TURN**: Relies on STUN for NAT traversal; may fail with symmetric NAT
+
+### Deployment Options
+
+| Option | Steps | Result |
+|--------|-------|--------|
+| **GitHub Pages** | `npm run build:p2p` → push `dist/` to `gh-pages` branch | Public demo URL |
+| **Any static host** | `npm run build:p2p` → upload `dist/` folder | Your domain |
+| **Single HTML file** | `npm run build:p2p:single` → open `dist/index.html` | Works offline, shareable |
+
+### P2P Signaling Backends
+
+Trystero supports multiple decentralized backends. All enabled backends connect in parallel; first success wins.
+
+| Backend | Bundle Size | Notes |
+|---------|-------------|-------|
+| **BitTorrent** | 5K | WebTorrent trackers — default, most reliable |
+| **Nostr** | 8K | Decentralized relays — good redundancy |
+| **MQTT** | 75K | Public MQTT brokers |
+| **IPFS** | 119K | DHT-based discovery |
+
+**Not supported:**
+- Supabase, Firebase — require account setup (violates "no accounts" principle)
+
+### Configuration
+
+P2P behavior is controlled by `p2p-config.json` (optional — defaults work out of box):
+
+```json
+{
+  "version": 1,
+  "transports": {
+    "priority": ["torrent", "nostr"],
+    "torrent": {
+      "enabled": true,
+      "announce": ["wss://tracker.openwebtorrent.com"]
+    },
+    "nostr": {
+      "enabled": true,
+      "relays": ["wss://relay.damus.io"]
+    }
+  }
+}
+```
+
+### Limitations
+
+- **No TURN relay**: Calls may fail with symmetric NAT or restrictive firewalls
+- **Best-effort connectivity**: Works for most users, not guaranteed for all
+- **No server-side features**: No room persistence, no admin controls
+
+---
+
+## Operating Mode 2: Self-Hosted
+
+**Requires your own server.** A single Go binary with embedded Vue app. Full control over reliability and privacy.
+
+### How It Works
+
+1. **Signaling**: WebSocket server for SDP/ICE exchange
+2. **Media**: Built-in TURN relay for guaranteed connectivity
+3. **Single binary**: Go server + embedded frontend, one file to deploy
+
+### Deployment Configurations
+
+Three configurations for different hosting scenarios:
+
+#### Config: `direct` — Binary Handles Everything
+
+```json
+{
+  "mode": "direct",
+  "domain": "call.example.com",
+  "public_ip": "auto",
+  "turn_port": 3478
+}
+```
+
+**What it does:**
+- Auto-issues Let's Encrypt certificate
+- Listens on :80 (HTTP-01 challenge) and :443 (HTTPS)
+- Auto-detects public IP for TURN relay
+- TURN on specified UDP port
+
+**Requirements:**
+- A domain name with DNS A record pointing to your server
+- Ports 80, 443 (TCP) and 3478 (UDP) open to the internet
+
+**Use case:** Fresh VPS with a domain, want simplest possible deploy.
+
+---
+
+#### Config: `proxy` — Behind Reverse Proxy
+
+```json
+{
+  "mode": "proxy",
+  "port": 8080,
+  "public_ip": "1.2.3.4",
+  "turn_port": 3478
+}
+```
+
+**What it does:**
+- Plain HTTP on internal port
+- Trusts `X-Forwarded-*` headers from reverse proxy
+- Manual `public_ip` required (can't auto-detect behind proxy)
+
+**Requirements:**
+- Reverse proxy (nginx, Caddy, Cloudflare Tunnel, etc.) handling TLS
+- TURN UDP port must be directly reachable (reverse proxies can't proxy UDP)
+- Know your public IP address
+
+**Use case:** Existing infrastructure, docker-compose, behind load balancer.
+
+---
+
+#### Config: `local` — Local Network Testing
+
+```json
+{
+  "mode": "local",
+  "https_port": 8443,
+  "public_ip": "auto",
+  "turn_port": 3478
+}
+```
+
+**What it does:**
+- Generates self-signed certificate (cached in `local_certs/`)
+- Auto-detects local IP for TURN relay
+- HTTPS on specified port
+
+**Requirements:**
+- None — works out of box
+
+**Browser warning:** Self-signed certificate triggers security warning. Click "Advanced" → "Proceed" to continue.
+
+**Use case:** Testing on local network, development, devices on same LAN.
+
+---
+
+### Deployment Matrix
+
+| Scenario | Config | What You Need |
+|----------|--------|---------------|
+| Fresh VPS, have domain | `direct` | DNS A record, ports 80/443/3478 open |
+| Behind nginx/Caddy | `proxy` | Reverse proxy config, public IP, port 3478 UDP open |
+| Behind Cloudflare Tunnel | `proxy` | Tunnel config, public IP, port 3478 UDP open |
+| Docker container | `proxy` | Expose port, mount config |
+| Local dev/testing | `local` | Nothing — just run it |
+| Raw IP, no domain | `proxy` | Public IP, self-signed cert warning |
+
+### TURN Constraint
+
+**TURN uses UDP and cannot be proxied.** In all self-hosted configurations:
+
+- TURN port MUST be directly reachable from clients
+- Firewall MUST allow UDP on `turn_port`
+- `public_ip` tells clients where to connect for media relay
+
+This is why `proxy` mode still requires a directly exposed UDP port.
 
 ---
 
@@ -72,95 +269,14 @@ That's it. No accounts, no configuration, no app installs.
 
 ---
 
-## Deployment Modes
-
-Set `mode` in config explicitly. One binary, two modes, zero confusion.
-
-### Mode: `direct` — Binary Handles Everything
-
-```json
-{
-  "mode": "direct",
-  "domain": "call.example.com",
-  "public_ip": "auto",
-  "turn_port": 3478
-}
-```
-
-- Auto-issues Let's Encrypt certificate
-- Listens on :80 (HTTP-01 challenge) and :443 (HTTPS)
-- Auto-detects public IP for TURN relay
-- TURN on specified UDP port (direct exposure required)
-- Zero infrastructure beyond DNS
-
-**Use case:** Fresh VPS with a domain, want simplest possible deploy.
-
-### Mode: `proxy` — Nginx/Caddy In Front
-
-```json
-{
-  "mode": "proxy",
-  "port": 8080,
-  "public_ip": "1.2.3.4",
-  "turn_port": 3478
-}
-```
-
-- Plain HTTP on internal port
-- Trusts `X-Forwarded-*` headers from reverse proxy
-- Manual `public_ip` required (can't auto-detect behind proxy)
-- TURN still needs direct UDP exposure (nginx can't proxy UDP)
-- You handle TLS termination
-
-**Use case:** Existing infrastructure, docker-compose, behind load balancer.
-
-### Deployment Matrix
-
-| Scenario | Config | Notes |
-|----------|--------|-------|
-| Fresh VPS, have domain | `mode: "direct"` + `domain` | Set DNS A record, run binary |
-| Behind nginx/caddy | `mode: "proxy"` + `port` + `public_ip` | TURN UDP still needs firewall rule |
-| Local dev | `mode: "proxy"` + `port` only | No TURN needed, localhost allows camera |
-| Docker | either mode | Use env vars for config |
-| Raw IP, no domain | `mode: "proxy"` + `public_ip` | Self-signed cert warning in browser |
-
-### TURN Constraint
-
-TURN uses UDP and cannot be proxied. In both modes:
-- TURN port must be directly reachable from clients
-- Firewall must allow UDP on `turn_port`
-- `public_ip` tells clients where to connect for media relay
-
----
-
-## Modes Explained
-
-### Mode 1 — Public Demo (GitHub Pages)
-
-- Static SPA hosted on GitHub Pages
-- Public STUN servers (array, first success wins)
-- Links never expire
-- Best-effort — may fail with strict NAT or across restrictive regions
-- Purpose: demo, casual use, no setup
-
-### Mode 2 — Self-Hosted Binary
-
-- Single Go binary + `config.json`
-- Two deployment modes (auto-detected)
-- Built-in TURN relay (HMAC auth, rate-limited)
-- Optional external TURN servers
-- Full control over reliability
-- Purpose: production, private, repeated use
-
----
-
 ## What It's Not
 
 - Not a Zoom alternative for teams
-- Not an SFU — no server-side media relay
+- Not an SFU — no server-side media mixing
 - Not for 100-person calls
 - Not for persistent data
 - Not a platform with accounts and analytics
+- Not a replacement for Self-Hosted mode if you need guaranteed connectivity
 
 ---
 
@@ -168,7 +284,7 @@ TURN uses UDP and cannot be proxied. In both modes:
 
 | Metric | Target |
 |--------|--------|
-| Cold deploy time | Under 5 minutes |
+| Cold deploy time (Self-Hosted) | Under 5 minutes |
 | Binary size | Under 20MB |
 | RAM idle | Under 30MB |
 | Time to connected call | Under 5 seconds |

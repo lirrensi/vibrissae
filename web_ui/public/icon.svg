@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Background -->
+  <rect width="512" height="512" rx="64" fill="#1f2937"/>
+  
+  <!-- Cat face outline (simplified) -->
+  <ellipse cx="256" cy="280" rx="140" ry="120" fill="#374151"/>
+  
+  <!-- Ears -->
+  <polygon points="140,180 180,100 220,180" fill="#374151"/>
+  <polygon points="292,180 332,100 372,180" fill="#374151"/>
+  
+  <!-- Inner ears -->
+  <polygon points="155,170 180,115 205,170" fill="#4b5563"/>
+  <polygon points="307,170 332,115 357,170" fill="#4b5563"/>
+  
+  <!-- Eyes -->
+  <ellipse cx="200" cy="260" rx="30" ry="35" fill="#1f2937"/>
+  <ellipse cx="312" cy="260" rx="30" ry="35" fill="#1f2937"/>
+  
+  <!-- Pupils -->
+  <ellipse cx="200" cy="260" rx="12" ry="20" fill="#3b82f6"/>
+  <ellipse cx="312" cy="260" rx="12" ry="20" fill="#3b82f6"/>
+  
+  <!-- Eye shine -->
+  <circle cx="206" cy="252" r="5" fill="#ffffff" opacity="0.8"/>
+  <circle cx="318" cy="252" r="5" fill="#ffffff" opacity="0.8"/>
+  
+  <!-- Nose -->
+  <ellipse cx="256" cy="310" rx="15" ry="10" fill="#f472b6"/>
+  
+  <!-- Mouth -->
+  <path d="M 241 325 Q 256 340 271 325" stroke="#9ca3af" stroke-width="3" fill="none"/>
+  
+  <!-- Whiskers (vibrissae) - left side -->
+  <line x1="120" y1="290" x2="200" y2="300" stroke="#e5e7eb" stroke-width="3" stroke-linecap="round"/>
+  <line x1="115" y1="310" x2="195" y2="315" stroke="#e5e7eb" stroke-width="3" stroke-linecap="round"/>
+  <line x1="120" y1="330" x2="200" y2="330" stroke="#e5e7eb" stroke-width="3" stroke-linecap="round"/>
+  
+  <!-- Whiskers (vibrissae) - right side -->
+  <line x1="312" y1="300" x2="392" y2="290" stroke="#e5e7eb" stroke-width="3" stroke-linecap="round"/>
+  <line x1="317" y1="315" x2="397" y2="310" stroke="#e5e7eb" stroke-width="3" stroke-linecap="round"/>
+  <line x1="312" y1="330" x2="392" y2="330" stroke="#e5e7eb" stroke-width="3" stroke-linecap="round"/>
+</svg>

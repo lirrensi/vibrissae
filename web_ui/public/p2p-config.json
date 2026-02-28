@@ -6,16 +6,22 @@
     "torrent": {
       "enabled": true,
       "announce": [
-        "wss://tracker.openwebtorrent.com",
-        "wss://tracker.webtorrent.dev"
+        "wss://tracker.openwebtorrent.com:443",
+        "wss://tracker.webtorrent.dev:443"
       ]
     },
     "nostr": {
       "enabled": true,
       "relays": [
         "wss://relay.damus.io",
-        "wss://nostr.mom",
-        "wss://relay.nostr.band"
+        "wss://nos.lol",
+        "wss://nostr-pub.semisol.dev",
+        "wss://nostr.oxtr.dev",
+        "wss://relay.nostr.info",
+        "wss://nostr.band",
+        "wss://relay.snort.social",
+        "wss://no.str.cr",
+        "wss://nostr.mom"
       ]
     }
   },

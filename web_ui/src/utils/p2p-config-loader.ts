@@ -1,11 +1,11 @@
 import { useLogStore } from '@/stores/log'
-import type { P2PConfig, TorrentConfig, NostrConfig, GunConfig } from '@/types/p2p-config'
+import type { P2PConfig, TorrentConfig, NostrConfig, MQTTConfig, IPFSConfig } from '@/types/p2p-config'
 
 // Default config inlined for single-file builds
 const defaultConfig: P2PConfig = {
   version: 1,
   transports: {
-    priority: ['torrent', 'nostr'],
+    priority: ['nostr', 'torrent', 'mqtt', 'ipfs'],
     torrent: {
       enabled: true,
       announce: ['wss://tracker.openwebtorrent.com', 'wss://tracker.webtorrent.dev']
@@ -13,6 +13,12 @@ const defaultConfig: P2PConfig = {
     nostr: {
       enabled: true,
       relays: ['wss://relay.damus.io', 'wss://nostr.mom']
+    },
+    mqtt: {
+      enabled: true
+    },
+    ipfs: {
+      enabled: true
     }
   },
   signaling: {
@@ -48,7 +54,8 @@ export async function loadP2PConfig(): Promise<P2PConfig> {
 function mergeWithDefaults(config: Partial<P2PConfig>): P2PConfig {
   const tc = config.transports?.torrent
   const nc = config.transports?.nostr
-  const gc = config.transports?.gun
+  const mc = config.transports?.mqtt
+  const ic = config.transports?.ipfs
 
   return {
     version: config.version ?? defaultConfig.version,
@@ -62,12 +69,14 @@ function mergeWithDefaults(config: Partial<P2PConfig>): P2PConfig {
         enabled: nc?.enabled ?? defaultConfig.transports.nostr!.enabled,
         relays: nc?.relays ?? defaultConfig.transports.nostr!.relays
       } as NostrConfig,
-      gun: {
-        enabled: gc?.enabled ?? defaultConfig.transports.gun?.enabled ?? false,
-        peers: gc?.peers ?? defaultConfig.transports.gun?.peers
-      } as GunConfig,
-      ipfs: config.transports?.ipfs,
-      mqtt: config.transports?.mqtt
+      mqtt: {
+        enabled: mc?.enabled ?? true,
+        url: mc?.url
+      } as MQTTConfig,
+      ipfs: {
+        enabled: ic?.enabled ?? true,
+        bootstrap: ic?.bootstrap
+      } as IPFSConfig
     },
     signaling: {
       resendIntervalMs:
