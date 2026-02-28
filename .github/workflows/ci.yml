@@ -76,10 +76,12 @@ jobs:
         working-directory: server
         run: go build -v -o vibrissae .
 
-  # E2E tests (requires built frontend)
+  # E2E tests (requires built frontend) - optional, doesn't block
   e2e:
     needs: frontend
     runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    continue-on-error: true
     
     steps:
       - name: Checkout

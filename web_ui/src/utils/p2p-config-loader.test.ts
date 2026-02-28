@@ -23,7 +23,7 @@ describe('p2p-config-loader', () => {
       const config = await loadP2PConfig()
 
       expect(config.version).toBe(1)
-      expect(config.transports.priority).toEqual(['torrent', 'nostr'])
+      expect(config.transports.priority).toEqual(['nostr', 'torrent', 'mqtt', 'ipfs'])
       expect(config.transports.torrent?.enabled).toBe(true)
       expect(config.transports.nostr?.enabled).toBe(true)
       expect(config.signaling.resendIntervalMs).toBe(3000)
@@ -113,7 +113,7 @@ describe('p2p-config-loader', () => {
 
       // Should have all defaults
       expect(config.version).toBe(1)
-      expect(config.transports.priority).toEqual(['torrent', 'nostr'])
+      expect(config.transports.priority).toEqual(['nostr', 'torrent', 'mqtt', 'ipfs'])
       expect(config.transports.torrent?.enabled).toBe(true)
       expect(config.signaling.resendIntervalMs).toBe(3000)
 
