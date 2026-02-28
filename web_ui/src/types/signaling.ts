@@ -6,6 +6,7 @@ export type SignalingMessageType =
   | 'answer' 
   | 'ice-candidate' 
   | 'error'
+  | 'hello'  // P2P: exchange participantId
 
 export interface SignalingMessage {
   type: SignalingMessageType
@@ -31,6 +32,10 @@ export interface PeerJoinedPayload {
 }
 
 export interface PeerLeftPayload {
+  participantId: string
+}
+
+export interface HelloPayload {
   participantId: string
 }
 

@@ -42,6 +42,7 @@ function handleSignalingMessage(msg: SignalingMessage) {
   console.log('[RoomView] Received message:', msg.type, msg)
   switch (msg.type) {
     case 'join-ack': {
+      // Server mode: acknowledge join with existing peers
       isLoading.value = false
       const payload = msg.payload as JoinAckPayload
       console.log('[RoomView] Join-ack with existing peers:', payload.existingPeers, 'initiatorId:', payload.initiatorId)
@@ -65,10 +66,13 @@ function handleSignalingMessage(msg: SignalingMessage) {
       break
     }
     case 'peer-joined': {
+      // P2P mode or server mode: new peer discovered
+      isLoading.value = false
       const payload = msg.payload as PeerJoinedPayload
       store.addParticipant(payload.participantId)
+      store.setInitiatorId(payload.initiatorId)
       
-      // Only initiate if WE are the initiator for this new peer
+      // Only initiate if WE are the initiator for this peer
       if (payload.initiatorId === store.participantId) {
         console.log(`[RoomView] We are initiator, connecting to new peer: ${payload.participantId}`)
         webrtc.initiateConnection(payload.participantId)
@@ -93,6 +97,13 @@ function handleSignalingMessage(msg: SignalingMessage) {
     }
     case 'ice-candidate': {
       webrtc.handleIceCandidate(msg.from!, msg.payload as RTCIceCandidateInit)
+      break
+    }
+    case 'peer-left': {
+      const payload = msg.payload as { participantId: string }
+      console.log(`[RoomView] Peer left: ${payload.participantId}`)
+      store.removeParticipant(payload.participantId)
+      webrtc.closePeerConnection(payload.participantId)
       break
     }
     case 'error':

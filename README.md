@@ -6,12 +6,16 @@
 
 **Lightweight, ephemeral video calls. No accounts. No downloads. Open link → you're in.**
 
+> ⚠️ VIBECODE ALERT - this app may be not so secure, we working on it
+
 Vibrissae is a WebRTC-based video calling application with two operating modes:
 
 | Mode | Server Required | Signaling | Best For |
 |------|-----------------|-----------|----------|
 | **Web Bundle** | No | Trystero (decentralized) | Quick demos, casual use, zero setup |
 | **Self-Hosted** | Yes | WebSocket + TURN | Production, private, reliable calls |
+
+
 
 ## Quick Start
 

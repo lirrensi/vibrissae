@@ -5,6 +5,9 @@ import type { SignalingMessage } from '@/types/signaling'
 import type { SignalingTransport } from '@/types/transport'
 import type { P2PConfig, TransportType } from '@/types/p2p-config'
 
+// Type for Trystero messages (must satisfy DataPayload/JsonValue)
+type SignalPayload = Record<string, string | number | boolean | null>
+
 export interface TrysteroTransportOptions {
   roomId: string
   config: P2PConfig
@@ -15,8 +18,11 @@ export interface TrysteroTransportOptions {
 // Store for each transport type
 interface TransportEntry {
   room: Room
-  send: ActionSender<Record<string, unknown>>
+  send: ActionSender<SignalPayload>
 }
+
+// Map trystero peerId -> our participantId
+type PeerIdMap = Map<string, string>
 
 export function createTrysteroTransport(options: TrysteroTransportOptions): SignalingTransport {
   const { roomId, config, onConnect, onDisconnect } = options
@@ -27,6 +33,9 @@ export function createTrysteroTransport(options: TrysteroTransportOptions): Sign
   const participantId = ref<string | null>(null)
   const activeTransports = new Map<TransportType, TransportEntry>()
   const messageHandler = ref<((msg: SignalingMessage) => void) | null>(null)
+
+  // For P2P handshake: map trysteroPeerId -> participantId
+  const peerIdMaps = new Map<TransportType, PeerIdMap>()
 
   // Generate unique participant ID
   participantId.value = crypto.randomUUID()
@@ -90,38 +99,80 @@ export function createTrysteroTransport(options: TrysteroTransportOptions): Sign
 
       const room = joinRoom(roomConfig as BaseRoomConfig & RelayConfig & TurnConfig, roomId)
 
-      // Handle incoming messages
-      room.onPeerJoin((peerId: string) => {
-        logStore.info('signaling', `Peer joined via ${type}`, { peerId: peerId.slice(0, 8) })
+      // Initialize peerId map for this transport
+      const peerIdMap = new Map<string, string>()
+      peerIdMaps.set(type, peerIdMap)
+
+      // Handle peer join - send hello with our participantId
+      room.onPeerJoin((trysteroPeerId: string) => {
+        logStore.info('signaling', `Peer discovered via ${type}`, { trysteroPeerId: trysteroPeerId.slice(0, 8) })
+        
+        // Send hello message to exchange participantIds
+        const helloMsg: SignalingMessage = {
+          type: 'hello',
+          from: participantId.value!,
+          payload: { participantId: participantId.value }
+        }
+        
+        const entry = activeTransports.get(type)
+        if (entry) {
+          // Send directly to this peer
+          entry.send(helloMsg as unknown as SignalPayload, trysteroPeerId)
+          logStore.info('signaling', `Sent hello to peer via ${type}`, { trysteroPeerId: trysteroPeerId.slice(0, 8) })
+        }
       })
 
-      room.onPeerLeave((peerId: string) => {
-        logStore.info('signaling', `Peer left via ${type}`, { peerId: peerId.slice(0, 8) })
+      room.onPeerLeave((trysteroPeerId: string) => {
+        logStore.info('signaling', `Peer left via ${type}`, { trysteroPeerId: trysteroPeerId.slice(0, 8) })
+        
+        // Look up the participantId for this trystero peer
+        const map = peerIdMaps.get(type)
+        const participantId = map?.get(trysteroPeerId)
+        
+        if (participantId) {
+          // Notify app layer
+          const leaveMsg: SignalingMessage = {
+            type: 'peer-left',
+            from: participantId,
+            payload: { participantId }
+          }
+          messageHandler.value?.(leaveMsg)
+          
+          // Clean up
+          map?.delete(trysteroPeerId)
+        }
       })
 
-      // Subscribe to messages - use a type that satisfies DataPayload
-      // DataPayload = JsonValue | Blob | ArrayBuffer | ArrayBufferView
-      // JsonValue = null | string | number | boolean | JsonValue[] | { [key: string]: JsonValue }
-      const [send, receive] = room.makeAction<Record<string, string | number | boolean | null>>('signal')
+      // Subscribe to messages
+      const [send, receive] = room.makeAction<SignalPayload>('signal')
 
-      receive((data, peerId: string) => {
+      receive((data, trysteroPeerId: string) => {
         if (!data || typeof data !== 'object') return
 
         const msg = data as unknown as SignalingMessage
 
-        // Filter messages not meant for us
+        // Handle P2P handshake
+        if (msg.type === 'hello') {
+          handleHello(type, trysteroPeerId, msg, peerIdMap)
+          return
+        }
+
+        // For other messages, filter by recipient
         if (msg.to && msg.to !== participantId.value) return
 
-        // Add from field if missing
+        // Enrich with from field (look up participantId from map)
+        const map = peerIdMaps.get(type)
+        const fromParticipantId = map?.get(trysteroPeerId) || msg.from
+
         const enriched: SignalingMessage = {
           ...msg,
-          from: msg.from || peerId
+          from: fromParticipantId
         }
 
         messageHandler.value?.(enriched)
       })
 
-      activeTransports.set(type, { room, send: send as ActionSender<Record<string, unknown>> })
+      activeTransports.set(type, { room, send })
 
       // If this is first successful connection
       if (!connected.value) {
@@ -135,6 +186,54 @@ export function createTrysteroTransport(options: TrysteroTransportOptions): Sign
       logStore.error('signaling', `P2P transport ${type} failed: ${err}`)
       return false
     }
+  }
+
+  // Handle hello message - exchange participantIds and determine initiator
+  function handleHello(
+    type: TransportType,
+    trysteroPeerId: string,
+    msg: SignalingMessage,
+    peerIdMap: PeerIdMap
+  ) {
+    const payload = msg.payload as { participantId: string }
+    const theirParticipantId = payload.participantId
+
+    if (!theirParticipantId) {
+      logStore.warn('signaling', `Received hello without participantId`)
+      return
+    }
+
+    logStore.info('signaling', `Received hello from peer via ${type}`, { 
+      trysteroPeerId: trysteroPeerId.slice(0, 8),
+      participantId: theirParticipantId.slice(0, 8)
+    })
+
+    // Store the mapping
+    peerIdMap.set(trysteroPeerId, theirParticipantId)
+
+    // Determine initiator: lexicographically smaller participantId initiates
+    const myId = participantId.value!
+    const theirId = theirParticipantId
+    const iAmInitiator = myId < theirId
+    const initiatorId = iAmInitiator ? myId : theirId
+
+    logStore.info('signaling', `Initiator election`, {
+      myId: myId.slice(0, 8),
+      theirId: theirId.slice(0, 8),
+      iAmInitiator,
+      initiatorId: initiatorId.slice(0, 8)
+    })
+
+    // Emit peer-joined to app layer
+    const joinedMsg: SignalingMessage = {
+      type: 'peer-joined',
+      from: theirParticipantId,
+      payload: {
+        participantId: theirParticipantId,
+        initiatorId
+      }
+    }
+    messageHandler.value?.(joinedMsg)
   }
 
   function connect() {
@@ -162,6 +261,7 @@ export function createTrysteroTransport(options: TrysteroTransportOptions): Sign
 
     activeTransports.forEach(({ room }) => room.leave())
     activeTransports.clear()
+    peerIdMaps.clear()
 
     connected.value = false
     logStore.info('signaling', 'P2P transports disconnected')
@@ -175,10 +275,10 @@ export function createTrysteroTransport(options: TrysteroTransportOptions): Sign
       from: participantId.value!
     }
 
-    // Send to all active transports
+    // Send to all active transports (broadcast - Trystero will route to correct peer if 'to' is set)
     activeTransports.forEach(({ send }, type) => {
       try {
-        send(enriched as unknown as Record<string, unknown>)
+        send(enriched as unknown as SignalPayload)
       } catch (err) {
         logStore.error('signaling', `P2P send failed (${type}): ${err}`)
       }
@@ -210,7 +310,7 @@ export function createTrysteroTransport(options: TrysteroTransportOptions): Sign
         // Resend to all transports
         activeTransports.forEach(({ send }, type) => {
           try {
-            send(pending.msg as unknown as Record<string, unknown>)
+            send(pending.msg as unknown as SignalPayload)
           } catch (err) {
             logStore.error('signaling', `P2P resend failed (${type}): ${err}`)
           }
