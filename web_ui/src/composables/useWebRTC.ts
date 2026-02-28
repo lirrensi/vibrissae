@@ -1,6 +1,7 @@
 import { ref, computed, onUnmounted } from 'vue'
 import { useRoomStore } from '@/stores/room'
 import { useLogStore } from '@/stores/log'
+import { getIceServers } from '@/utils/p2p-config-loader'
 import type { useSignaling } from './useSignaling'
 
 // Timeout for WebRTC operations (ms)
@@ -42,17 +43,25 @@ export function useWebRTC(
   const videoError = ref<string | null>(null)
   const iceRestartStates = ref<Map<string, IceRestartState>>(new Map())
   
+  // ICE servers - loaded from P2P config
+  const iceServers = ref<RTCIceServer[]>([])
+  
+  // Load ICE servers async
+  getIceServers().then(servers => {
+    iceServers.value = servers
+    logStore.info('webrtc', `Loaded ${servers.length} ICE servers from config`)
+  }).catch(err => {
+    logStore.error('webrtc', 'Failed to load ICE servers', err)
+  })
+  
   // ICE servers configuration
   const rtcConfig = computed<RTCConfiguration>(() => {
     const config: RTCConfiguration = { iceServers: [] }
     const appConfig = window.__CONFIG__
     
-    // P2P mode: use default STUN servers
+    // P2P mode: use ICE servers from p2p-config.json
     if (!appConfig) {
-      config.iceServers = [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' }
-      ]
+      config.iceServers = iceServers.value
       return config
     }
     
@@ -89,9 +98,10 @@ export function useWebRTC(
     return config
   })
   
-  async function tryGetAudio(deviceId?: string): Promise<boolean> {
-    try {
-      const constraints: MediaStreamConstraints = {
+async function tryGetAudio(deviceId?: string): Promise<boolean> {
+  logStore.info('webrtc', 'tryGetAudio', { deviceId: deviceId?.slice(0, 8) })
+  try {
+    const constraints: MediaStreamConstraints = {
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
@@ -128,18 +138,20 @@ export function useWebRTC(
       
       hasAudio.value = true
       audioError.value = null
+      logStore.info('webrtc', 'Audio acquired OK')
       return true
     } catch (err) {
-      console.error('Failed to get audio:', err)
+      logStore.error('webrtc', 'Audio failed', err)
       audioError.value = err instanceof Error ? err.message : 'Unknown audio error'
       hasAudio.value = false
       return false
     }
   }
 
-  async function tryGetVideo(deviceId?: string): Promise<boolean> {
-    try {
-      const constraints: MediaStreamConstraints = {
+async function tryGetVideo(deviceId?: string): Promise<boolean> {
+  logStore.info('webrtc', 'tryGetVideo', { deviceId: deviceId?.slice(0, 8) })
+  try {
+    const constraints: MediaStreamConstraints = {
         video: {
           width: { ideal: 1920, max: 1920 },
           height: { ideal: 1080, max: 1080 },
@@ -177,9 +189,10 @@ export function useWebRTC(
       hasVideo.value = true
       isVideoOff.value = false
       videoError.value = null
+      logStore.info('webrtc', 'Video acquired OK')
       return true
     } catch (err) {
-      console.error('Failed to get video:', err)
+      logStore.error('webrtc', 'Video failed', err)
       videoError.value = err instanceof Error ? err.message : 'Unknown video error'
       hasVideo.value = false
       return false
@@ -193,12 +206,9 @@ export function useWebRTC(
     store.setLocalStream(null)
   }
   
-  function createPeerConnection(participantId: string, isInitiator: boolean): RTCPeerConnection {
-    logStore.info('webrtc', `Creating peer connection`, { 
-      participantId: participantId.slice(0, 8), 
-      isInitiator 
-    })
-    const pc = new RTCPeerConnection(rtcConfig.value)
+function createPeerConnection(participantId: string, isInitiator: boolean): RTCPeerConnection {
+  logStore.info('webrtc', `Creating PC`, { participantId: participantId.slice(0, 8), isInitiator, localTracks: store.localStream?.getTracks().length || 0 })
+  const pc = new RTCPeerConnection(rtcConfig.value)
     
     // Add local tracks
     if (store.localStream) {

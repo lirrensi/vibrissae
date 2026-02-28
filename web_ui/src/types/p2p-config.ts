@@ -7,6 +7,7 @@ export interface P2PConfig {
     mqtt?: MQTTConfig
     ipfs?: IPFSConfig
   }
+  iceServers?: IceServer[]
   signaling: {
     resendIntervalMs: number
     resendMaxAttempts: number
@@ -33,4 +34,10 @@ export interface MQTTConfig {
 export interface IPFSConfig {
   enabled: boolean
   bootstrap?: string[]
+}
+
+export interface IceServer {
+  urls: string
+  username?: string
+  credential?: string
 }

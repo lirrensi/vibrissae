@@ -21,38 +21,66 @@ const defaultConfig: P2PConfig = {
       enabled: true
     }
   },
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
+    { urls: 'stun:stun4.l.google.com:19302' },
+    { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' }
+  ],
   signaling: {
     resendIntervalMs: 3000,
     resendMaxAttempts: 10
   }
 }
 
+// Cache for loaded config
+let _cachedConfig: P2PConfig | null = null
+
 export async function loadP2PConfig(): Promise<P2PConfig> {
+  // Return cached config if available
+  if (_cachedConfig) {
+    return _cachedConfig
+  }
+
   const logStore = useLogStore()
+  let config: P2PConfig
 
   // In single-file mode, import the bundled config (inlined at build time)
   if (typeof __BUILD_MODE__ !== 'undefined' && __BUILD_MODE__ === 'single') {
     const bundledConfig = await import('../../public/p2p-config.json')
     logStore.info('signaling', 'Single-file mode: using bundled P2P config')
-    return mergeWithDefaults(bundledConfig as Partial<P2PConfig>)
-  }
+    config = mergeWithDefaults(bundledConfig as Partial<P2PConfig>)
+  } else {
+    // In normal P2P mode, fetch external config
+    try {
+      const response = await fetch('/p2p-config.json', {
+        cache: 'no-cache'
+      })
 
-  // In normal P2P mode, fetch external config
-  try {
-    const response = await fetch('/p2p-config.json', {
-      cache: 'no-cache'
-    })
-
-    if (response.ok) {
-      const config = (await response.json()) as Partial<P2PConfig>
-      logStore.info('signaling', 'P2P config loaded from external file')
-      return mergeWithDefaults(config)
+      if (response.ok) {
+        const loadedConfig = (await response.json()) as Partial<P2PConfig>
+        logStore.info('signaling', 'P2P config loaded from external file')
+        config = mergeWithDefaults(loadedConfig)
+      } else {
+        config = defaultConfig
+      }
+    } catch {
+      logStore.info('signaling', 'External P2P config not found, using default')
+      config = defaultConfig
     }
-  } catch {
-    logStore.info('signaling', 'External P2P config not found, using default')
   }
 
-  return defaultConfig
+  // Cache the config
+  _cachedConfig = config
+  return config
+}
+
+// Get ICE servers from loaded config
+export async function getIceServers(): Promise<IceServer[]> {
+  const config = await loadP2PConfig()
+  return config.iceServers ?? defaultConfig.iceServers ?? []
 }
 
 function mergeWithDefaults(config: Partial<P2PConfig>): P2PConfig {
@@ -82,6 +110,7 @@ function mergeWithDefaults(config: Partial<P2PConfig>): P2PConfig {
         bootstrap: ic?.bootstrap
       } as IPFSConfig
     },
+    iceServers: config.iceServers ?? defaultConfig.iceServers,
     signaling: {
       resendIntervalMs:
         config.signaling?.resendIntervalMs ?? defaultConfig.signaling.resendIntervalMs,

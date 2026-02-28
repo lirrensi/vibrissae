@@ -3,6 +3,7 @@ import { onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useRoomStore } from '@/stores/room'
+import { useLogStore } from '@/stores/log'
 import { useSignaling } from '@/composables/useSignaling'
 import { useWebRTC } from '@/composables/useWebRTC'
 import { useDevices } from '@/composables/useDevices'
@@ -20,6 +21,7 @@ import type { SignalingMessage, JoinAckPayload, PeerJoinedPayload } from '@/type
 const route = useRoute()
 const router = useRouter()
 const store = useRoomStore()
+const logStore = useLogStore()
 const { localStream, participants, participantId } = storeToRefs(store)
 
 const roomId = route.params.id as string
@@ -39,7 +41,11 @@ const deafen = useDeafen(participants)
 
 // Define message handler (now webrtc is available)
 function handleSignalingMessage(msg: SignalingMessage) {
-  console.log('[RoomView] Received message:', msg.type, msg)
+  logStore.info('roomview', `Received ${msg.type}`, { 
+    from: msg.from?.slice(0, 8), 
+    to: msg.to?.slice(0, 8),
+    payload: msg.payload 
+  })
   switch (msg.type) {
     case 'join-ack': {
       // Server mode: acknowledge join with existing peers
@@ -74,24 +80,24 @@ function handleSignalingMessage(msg: SignalingMessage) {
       
       // Only initiate if WE are the initiator for this peer
       if (payload.initiatorId === store.participantId) {
-        console.log(`[RoomView] We are initiator, connecting to new peer: ${payload.participantId}`)
-        webrtc.initiateConnection(payload.participantId)
+      logStore.info('roomview', `We are initiator, connecting to new peer`, { participantId: payload.participantId })
+      webrtc.initiateConnection(payload.participantId)
       } else {
-        console.log(`[RoomView] Waiting for offer from initiator: ${payload.initiatorId}`)
+        logStore.info('roomview', `Waiting for offer from initiator`, { initiatorId: payload.initiatorId })
       }
       break
     }
     case 'offer': {
-      console.log(`[RoomView] Received offer from: ${msg.from}`)
+      logStore.info('roomview', `Received offer from`, { from: msg.from })
       webrtc.handleOffer(msg.from!, msg.payload as RTCSessionDescriptionInit).catch(err => {
-        console.error('[RoomView] handleOffer error:', err)
+        logStore.error('roomview', 'handleOffer error', err)
       })
       break
     }
     case 'answer': {
-      console.log(`[RoomView] Received answer from: ${msg.from}`)
+      logStore.info('roomview', `Received answer from`, { from: msg.from })
       webrtc.handleAnswer(msg.from!, msg.payload as RTCSessionDescriptionInit).catch(err => {
-        console.error('[RoomView] handleAnswer error:', err)
+        logStore.error('roomview', 'handleAnswer error', err)
       })
       break
     }

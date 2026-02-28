@@ -1,6 +1,7 @@
 import { ref, onUnmounted } from 'vue'
 import { joinRoom, type Room, type ActionSender, type BaseRoomConfig, type RelayConfig, type TurnConfig } from 'trystero'
 import { useLogStore } from '@/stores/log'
+import { useRoomStore } from '@/stores/room'
 import type { SignalingMessage } from '@/types/signaling'
 import type { SignalingTransport } from '@/types/transport'
 import type { P2PConfig, TransportType } from '@/types/p2p-config'
@@ -37,8 +38,11 @@ export function createTrysteroTransport(options: TrysteroTransportOptions): Sign
   // For P2P handshake: map trysteroPeerId -> participantId
   const peerIdMaps = new Map<TransportType, PeerIdMap>()
 
-  // Generate unique participant ID
+  // Generate unique participant ID and sync with room store
   participantId.value = crypto.randomUUID()
+  const roomStore = useRoomStore()
+  roomStore.setParticipantId(participantId.value)
+  logStore.info('signaling', `P2P participantId set`, { participantId: participantId.value.slice(0, 8) })
 
   let resendTimer: ReturnType<typeof setInterval> | null = null
   const pendingMessages = new Map<string, { msg: SignalingMessage; attempts: number }>()
@@ -158,6 +162,27 @@ export function createTrysteroTransport(options: TrysteroTransportOptions): Sign
           trysteroPeer: trysteroPeerId.slice(0, 8)
         })
 
+        // Skip our own messages (Trystero may broadcast to self in some configs)
+        // Check both 'from' field and participantId in payload
+        const payloadData = msg.payload as Record<string, unknown> | undefined
+        const msgParticipantId = payloadData?.participantId as string | undefined
+        const fromId = msg.from
+        
+        const isFromSelf = msgParticipantId === participantId.value || fromId === participantId.value
+        logStore.info('signaling', `Message check`, { 
+          type: msg.type, 
+          msgParticipantId: msgParticipantId?.slice(0, 8),
+          fromId: fromId?.slice(0, 8),
+          ourId: participantId.value?.slice(0, 8),
+          isFromSelf
+        })
+        if (isFromSelf) {
+          logStore.info('signaling', `FILTERED: message from self`, { 
+            type: msg.type
+          })
+          return
+        }
+
         // Handle P2P handshake
         if (msg.type === 'hello') {
           handleHello(type, trysteroPeerId, msg, peerIdMap)
@@ -208,8 +233,25 @@ export function createTrysteroTransport(options: TrysteroTransportOptions): Sign
     msg: SignalingMessage,
     peerIdMap: PeerIdMap
   ) {
+    logStore.info('signaling', `handleHello called`, {
+      trysteroPeerId: trysteroPeerId.slice(0, 8),
+      msgFrom: msg.from?.slice(0, 8),
+      payload: msg.payload
+    })
+    
     const payload = msg.payload as { participantId: string }
     const theirParticipantId = payload.participantId
+
+    // Ignore hello messages from ourselves (Trystero may echo our own messages)
+    if (theirParticipantId === participantId.value) {
+      logStore.info('signaling', `Ignoring hello from self`)
+      return
+    }
+    
+    logStore.info('signaling', `Processing hello from peer`, {
+      theirId: theirParticipantId?.slice(0, 8),
+      ourId: participantId.value?.slice(0, 8)
+    })
 
     if (!theirParticipantId) {
       logStore.warn('signaling', `Received hello without participantId`)

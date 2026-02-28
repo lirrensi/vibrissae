@@ -45,6 +45,11 @@ export function useSignaling(options: UseSignalingOptions | string) {
       }
       case 'peer-joined': {
         const peerId = (msg.payload as { participantId: string }).participantId
+        // Don't add ourselves as a participant
+        if (peerId === store.participantId) {
+          logStore.info('signaling', 'Ignoring peer-joined for self', { peerId: peerId.slice(0, 8) })
+          break
+        }
         store.addParticipant(peerId)
         logStore.info('signaling', 'Peer joined', { peerId: peerId.slice(0, 8) })
         break
