@@ -24,9 +24,6 @@ export function useSignaling(options: UseSignalingOptions | string) {
   const signalingOffline = ref(false)
   const reconnectExhausted = ref(false)
 
-  const _reconnectAttempts = ref(0)
-  const _maxReconnectAttempts = 10
-  const _baseDelay = 1000
   let _p2pEstablished = false
   let userMessageHandler: ((msg: SignalingMessage) => void) | null = null
   let transportInitialized = false
