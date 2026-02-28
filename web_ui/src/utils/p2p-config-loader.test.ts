@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { loadP2PConfig } from './p2p-config-loader'
+import { loadP2PConfig, resetP2PConfigCache } from './p2p-config-loader'
 
 // Mock the log store
 vi.mock('@/stores/log', () => ({
@@ -13,6 +13,8 @@ vi.mock('@/stores/log', () => ({
 describe('p2p-config-loader', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    // Reset config cache before each test
+    resetP2PConfigCache()
   })
 
   describe('loadP2PConfig', () => {
@@ -33,12 +35,17 @@ describe('p2p-config-loader', () => {
     })
 
     it('should load external config when available', async () => {
+      // Clear cache to ensure fresh load
+      vi.resetModules()
+
       const mockConfig = {
         version: 2,
         transports: {
           priority: ['nostr'],
           torrent: { enabled: false },
-          nostr: { enabled: true, relays: ['wss://custom.relay'] }
+          nostr: { enabled: true, relays: ['wss://custom.relay'] },
+          mqtt: { enabled: false },
+          ipfs: { enabled: false }
         },
         signaling: { resendIntervalMs: 5000, resendMaxAttempts: 5 }
       }
@@ -63,9 +70,12 @@ describe('p2p-config-loader', () => {
     })
 
     it('should merge partial external config with defaults', async () => {
+      // Clear cache to ensure fresh load
+      vi.resetModules()
+
       const mockConfig = {
         transports: {
-          priority: ['gun'],
+          priority: ['torrent', 'nostr'],
           torrent: { enabled: true }
           // nostr not provided - should use default
         }
@@ -79,7 +89,7 @@ describe('p2p-config-loader', () => {
 
       const config = await loadP2PConfig()
 
-      expect(config.transports.priority).toEqual(['gun'])
+      expect(config.transports.priority).toEqual(['torrent', 'nostr'])
       expect(config.transports.torrent?.enabled).toBe(true)
       // nostr should use default
       expect(config.transports.nostr?.enabled).toBe(true)
@@ -186,6 +196,9 @@ describe('p2p-config-loader', () => {
     })
 
     it('should handle ipfs and mqtt configs when provided', async () => {
+      // Clear module cache to ensure fresh config load
+      vi.resetModules()
+
       const mockConfig = {
         transports: {
           priority: ['torrent', 'nostr', 'ipfs', 'mqtt'],
@@ -199,7 +212,9 @@ describe('p2p-config-loader', () => {
         json: async () => mockConfig
       }))
 
-      const config = await loadP2PConfig()
+      // Import fresh to get new module instance with cleared cache
+      const { loadP2PConfig: loadP2PConfigFresh } = await import('./p2p-config-loader')
+      const config = await loadP2PConfigFresh()
 
       expect(config.transports.ipfs?.enabled).toBe(true)
       expect(config.transports.ipfs?.bootstrap).toEqual(['/ip4/127.0.0.1/tcp/4001'])

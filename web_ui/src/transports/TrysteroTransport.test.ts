@@ -25,6 +25,17 @@ vi.mock('@/stores/log', () => ({
   })
 }))
 
+// Mock the room store
+vi.mock('@/stores/room', () => ({
+  useRoomStore: () => ({
+    participantId: { value: null },
+    setParticipantId: vi.fn(),
+    peers: { value: [] },
+    addPeer: vi.fn(),
+    removePeer: vi.fn()
+  })
+}))
+
 describe('TrysteroTransport', () => {
   let transport: ReturnType<typeof createTrysteroTransport>
   const roomId = 'test-room-123'

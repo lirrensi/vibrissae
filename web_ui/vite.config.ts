@@ -10,7 +10,14 @@ export default defineConfig(({ mode }) => {
   const isSingleFile = process.env.BUILD_MODE === 'single'
   const isServer = mode === 'server'
 
+  // Set base path for GitHub Pages deployment (subpath /vibrissae/)
+  // Use VITE_BASE_URL env var or default to /vibrissae/ for production builds
+  const basePath = isServer
+    ? '/'
+    : (process.env.VITE_BASE_URL || (process.env.BUILD_MODE === 'single' ? '/vibrissae/' : '/'))
+
   const baseConfig: UserConfig = {
+    base: basePath,
     plugins: [
       vue(),
       vueDevTools(),

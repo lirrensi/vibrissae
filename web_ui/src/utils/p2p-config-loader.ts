@@ -38,6 +38,11 @@ const defaultConfig: P2PConfig = {
 // Cache for loaded config
 let _cachedConfig: P2PConfig | null = null
 
+// Reset cache (useful for testing)
+export function resetP2PConfigCache(): void {
+  _cachedConfig = null
+}
+
 export async function loadP2PConfig(): Promise<P2PConfig> {
   // Return cached config if available
   if (_cachedConfig) {
