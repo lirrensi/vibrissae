@@ -12,5 +12,9 @@ export default defineConfig({
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url))
     }
+  },
+  define: {
+    __BUILD_MODE__: JSON.stringify('test'),
+    __P2P_CONFIG__: 'null'
   }
 })
