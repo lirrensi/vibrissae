@@ -8,6 +8,8 @@ Full p2p video calls without fuckery.
 
 **Lightweight, ephemeral video calls. No accounts. No downloads. Open link → you're in.**
 
+[![Vibrissae Screenshot](web_ui/public/vibrissae_sm.jpg)](https://lirrensi.github.io/vibrissae/)
+
 > ⚠️ VIBECODE ALERT - this app may be not so secure, we working on it
 
 Vibrissae is a WebRTC-based video calling application with two operating modes:

@@ -146,7 +146,7 @@ async function tryGetAudio(deviceId?: string): Promise<boolean> {
       logStore.info('webrtc', 'Audio acquired OK')
       return true
     } catch (err) {
-      logStore.error('webrtc', 'Audio failed', err)
+      logStore.error('webrtc', 'Audio failed', err as Record<string, unknown>)
       audioError.value = err instanceof Error ? err.message : 'Unknown audio error'
       hasAudio.value = false
       return false
@@ -202,7 +202,7 @@ async function tryGetVideo(deviceId?: string): Promise<boolean> {
       logStore.info('webrtc', 'Video acquired OK')
       return true
     } catch (err) {
-      logStore.error('webrtc', 'Video failed', err)
+      logStore.error('webrtc', 'Video failed', err as Record<string, unknown>)
       videoError.value = err instanceof Error ? err.message : 'Unknown video error'
       hasVideo.value = false
       return false
@@ -410,7 +410,7 @@ function createPeerConnection(participantId: string, isInitiator: boolean): RTCP
       signaling.send('offer', participantId, { sdp: offer.sdp, type: offer.type })
       logStore.info('webrtc', 'Renegotiation offer sent', { participantId: participantId.slice(0, 8) })
     } catch (err) {
-      logStore.error('webrtc', 'Renegotiation failed', err)
+      logStore.error('webrtc', 'Renegotiation failed', err as Record<string, unknown>)
     }
   }
   

@@ -78,7 +78,7 @@ export async function loadP2PConfig(): Promise<P2PConfig> {
 }
 
 // Get ICE servers from loaded config
-export async function getIceServers(): Promise<IceServer[]> {
+export async function getIceServers(): Promise<RTCIceServer[]> {
   const config = await loadP2PConfig()
   return config.iceServers ?? defaultConfig.iceServers ?? []
 }
