@@ -66,7 +66,7 @@ export async function loadP2PConfig(): Promise<P2PConfig> {
     } catch (err) {
       // This should NEVER happen - config is embedded at build time
       const msg = 'FATAL: Failed to parse embedded P2P config'
-      logStore.error('signaling', msg, err)
+      logStore.error('signaling', msg, { error: err instanceof Error ? err.message : String(err) })
       throw new Error(msg)
     }
   } else {

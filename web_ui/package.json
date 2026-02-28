@@ -17,7 +17,12 @@
         "format": "oxfmt src/",
         "build:server": "cross-env BUILD_MODE=server vite build --mode server",
         "build:p2p": "cross-env BUILD_MODE=p2p vite build --mode p2p",
-        "build:p2p:single": "cross-env BUILD_MODE=single VITE_BASE_URL=/vibrissae/ vite build --mode p2p"
+        "build:p2p:single": "cross-env BUILD_MODE=single VITE_BASE_URL=/vibrissae/ vite build --mode p2p",
+        "check": "run-s type-check lint build:p2p:single",
+        "prepare": "simple-git-hooks"
+    },
+    "simple-git-hooks": {
+        "pre-commit": "pnpm check"
     },
     "dependencies": {
         "pinia": "^3.0.4",
@@ -46,6 +51,7 @@
         "npm-run-all2": "^8.0.4",
         "oxfmt": "^0.35.0",
         "oxlint": "~1.50.0",
+        "simple-git-hooks": "^2.12.1",
         "typescript": "~5.9.3",
         "vite": "^7.3.1",
         "vite-plugin-pwa": "^1.2.0",
