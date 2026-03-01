@@ -38,8 +38,10 @@ export function createP2PSignalingProtocol(
   
   let resendTimer: ReturnType<typeof setInterval> | null = null
   
-  // Map transport peer ID to our participant ID
+  // Map transport peer ID to participant ID (for incoming messages)
   const peerIdMap = new Map<string, string>()
+  // Map participant ID to transport peer ID (for outgoing messages)
+  const participantToTransportMap = new Map<string, string>()
   
   function startResendTimer() {
     if (resendTimer) return
@@ -50,6 +52,12 @@ export function createP2PSignalingProtocol(
           pendingMessages.delete(key)
           return
         }
+        // Translate participantId to transportPeerId for resend
+        const transportPeerId = pending.msg.to ? participantToTransportMap.get(pending.msg.to) : null
+        if (!transportPeerId) {
+          pendingMessages.delete(key)
+          return
+        }
         // Resend via transport
         const transportMsg: TransportMessage = {
           type: pending.msg.type,
@@ -57,7 +65,7 @@ export function createP2PSignalingProtocol(
           from: participantId.value!,
           to: pending.msg.to
         }
-        transport.sendTo(pending.msg.to!, transportMsg)
+        transport.sendTo(transportPeerId, transportMsg)
       })
     }, config.resendIntervalMs)
   }
@@ -76,8 +84,10 @@ export function createP2PSignalingProtocol(
       participantId: theirParticipantId.slice(0, 8)
     })
     
-    // Map transport peer to participant
+    // Map transport peer to participant (for incoming)
     peerIdMap.set(transportPeerId, theirParticipantId)
+    // Map participant to transport peer (for outgoing)
+    participantToTransportMap.set(theirParticipantId, transportPeerId)
     
     // Determine initiator: smaller UUID initiates
     const myId = participantId.value!
@@ -159,6 +169,7 @@ export function createP2PSignalingProtocol(
         }
         messageHandler.value?.(leaveMsg)
         peerIdMap.delete(transportPeerId)
+        participantToTransportMap.delete(leftParticipantId)
       }
     })
     
@@ -176,6 +187,7 @@ export function createP2PSignalingProtocol(
     }
     transport.disconnect()
     peerIdMap.clear()
+    participantToTransportMap.clear()
     pendingMessages.clear()
     connected.value = false
   }
@@ -192,7 +204,13 @@ export function createP2PSignalingProtocol(
     
     // Broadcast or send to specific peer
     if (message.to) {
-      transport.sendTo(message.to, {
+      // Translate participantId to transportPeerId
+      const transportPeerId = participantToTransportMap.get(message.to)
+      if (!transportPeerId) {
+        logStore.warn('signaling', `Unknown participant ${message.to?.slice(0, 8)}, cannot send ${message.type}`)
+        return
+      }
+      transport.sendTo(transportPeerId, {
         type: message.type,
         payload: message.payload,
         from: participantId.value!,
