@@ -1,0 +1,39 @@
+# Dependencies
+web_ui/node_modules/
+web_ui/.pnpm-store/
+
+# Build outputs
+web_ui/dist/
+server/dist/
+server/vibrissae
+server/vibrissae.exe
+*.exe
+
+# Test artifacts
+web_ui/playwright-report/
+web_ui/test-results/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Docs (not needed in container)
+docs/
+*.md
+!README.md
+
+# CI
+.github/
+
+# Test files
+*_test.go

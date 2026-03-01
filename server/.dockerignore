@@ -1,0 +1,27 @@
+# Test files
+*_test.go
+
+# Build artifacts
+vibrissae
+vibrissae.exe
+*.exe
+
+# Embedded web (already in binary via go:embed)
+dist/
+
+# Runtime directories (mounted as volumes)
+certs/
+local_certs/
+
+# Config (mounted as volume)
+config.json
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

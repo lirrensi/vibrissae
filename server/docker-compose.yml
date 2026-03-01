@@ -1,0 +1,33 @@
+services:
+  vibrissae:
+    build:
+      context: .
+      args:
+        VERSION: ${VERSION:-dev}
+    image: vibrissae:${VERSION:-latest}
+    container_name: vibrissae
+    
+    # Host network mode - container shares host's network
+    # No port mapping needed, TURN UDP works directly
+    network_mode: host
+    
+    # Restart policy
+    restart: unless-stopped
+    
+    # Required config file
+    volumes:
+      - ./config.json:/app/config.json:ro
+      
+    # Optional: persist Let's Encrypt certificates (direct mode)
+    # - ./certs:/app/certs
+    
+    # Optional: persist self-signed certificates (local mode)
+    # - ./local_certs:/app/local_certs
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s

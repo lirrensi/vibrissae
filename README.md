@@ -1,12 +1,24 @@
 # Vibrissae
 
-Full p2p video calls without fuckery. 
+Full p2p video calls without fuckery.
 
-[![CI](https://github.com/lirrensi/vibrissae/actions/workflows/ci.yml/badge.svg)](https://github.com/lirrensi/vibrissae/actions/workflows/ci.yml)
-[![Deploy to Pages](https://github.com/lirrensi/vibrissae/actions/workflows/deploy-pages.yml/badge.svg)](https://github.com/lirrensi/vibrissae/actions/workflows/deploy-pages.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+---
 
-**Lightweight, ephemeral video calls. No accounts. No downloads. Open link → you're in.**
+## Try it now → [lirrensi.github.io/vibrissae](https://lirrensi.github.io/vibrissae)
+
+## Deploy it → [DEPLOY.md](DEPLOY.md) (point your AI agent here)
+
+---
+
+## What is this?
+
+**10-second pitch:** A privacy-first video chat that works right in your browser. No account, no install, no tracking. Just open a link and you're talking. Uses peer-to-peer WebRTC so your video never touches a server (in P2P mode).
+
+- **Zero friction** — Open link → in call
+- **Zero surveillance** — No accounts, no telemetry, rooms die on refresh
+- **Two modes** — P2P (no server) or Self-hosted (your own server)
+
+---
 
 [![Vibrissae Screenshot](web_ui/public/vibrissae_sm.jpg)](https://lirrensi.github.io/vibrissae/)
 
@@ -18,7 +30,6 @@ Vibrissae is a WebRTC-based video calling application with two operating modes:
 |------|-----------------|-----------|----------|
 | **Web Bundle** | No | Trystero (decentralized) | Quick demos, casual use, zero setup |
 | **Self-Hosted** | Yes | WebSocket + TURN | Production, private, reliable calls |
-
 
 
 ## Quick Start

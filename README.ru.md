@@ -2,11 +2,23 @@
 
 P2P видеозвонки без ебли.
 
-[![CI](https://github.com/lirrensi/vibrissae/actions/workflows/ci.yml/badge.svg)](https://github.com/lirrensi/vibrissae/actions/workflows/ci.yml)
-[![Deploy to Pages](https://github.com/lirrensi/vibrissae/actions/workflows/deploy-pages.yml/badge.svg)](https://github.com/lirrensi/vibrissae/actions/workflows/deploy-pages.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+---
 
-**Лёгкие эфемерные видеозвонки. Без аккаунтов. Без загрузок. Открой ссылку → и ты в звонке.**
+## Попробуй сейчас → [lirrensi.github.io/vibrissae](https://lirrensi.github.io/vibrissae)
+
+## Задеплой → [DEPLOY.md](DEPLOY.md) (шли своего AI агента сюда)
+
+---
+
+## Что это?
+
+**За 10 секунд:** Видеочат с фокусом на приватность, работает прямо в браузере. Без аккаунта, без установки, без слежки. Открой ссылку — и ты в разговоре. Использует P2P WebRTC, так что твоё видео вообще не касается сервера (в P2P режиме).
+
+- **Ноль трения** — Открой ссылку → в звонке
+- **Ноль слежки** — Без аккаунтов, без телеметрии, комнаты исчезают при обновлении
+- **Два режима** — P2P (без сервера) или self-hosted (свой сервер)
+
+---
 
 [![Скриншот Vibrissae](web_ui/public/vibrissae_sm.jpg)](https://lirrensi.github.io/vibrissae/)
 
@@ -18,6 +30,7 @@ Vibrissae — видеозвонки на WebRTC с двумя режимами 
 |-------|--------------|--------------|----------|
 | **Веб-пакет** | Нет | Trystero (децентрализованная) | Быстрые демо, казуальное использование |
 | **Сам-hosted** | Да | WebSocket + TURN | Продакшен, приватные звонки |
+
 
 ## Быстрый старт
 

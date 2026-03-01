@@ -2,11 +2,23 @@
 
 ごちゃごちゃなしのP2Pビデオ通話。
 
-[![CI](https://github.com/lirrensi/vibrissae/actions/workflows/ci.yml/badge.svg)](https://github.com/lirrensi/vibrissae/actions/workflows/ci.yml)
-[![Deploy to Pages](https://github.com/lirrensi/vibrissae/actions/workflows/deploy-pages.yml/badge.svg)](https://github.com/lirrensi/vibrissae/actions/workflows/deploy-pages.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+---
 
-**軽量な使い捨てビデオ通話。アカウント不要。ダウンロード不要。リンクを開く→そのまま参加。**
+## 今すぐ試す → [lirrensi.github.io/vibrissae](https://lirrensi.github.io/vibrissae)
+
+## デプロイ → [DEPLOY.md](DEPLOY.md) (AIエージェント向け)
+
+---
+
+## これは何？
+
+**10秒で説明:** プライバシー重視のビデオチャット。ブラウザだけで動く。アカウント不要、インストール不要、トラッキングなし。リンクを開くだけで通話开始。P2PモードならWebRTCでエンドツーエンドだから動画をサーバーが見ることはない。
+
+- **ゼロ摩擦** — リンクを開く→通話开始
+- **ゼロ監視** — アカウント不要、テレメトリなし、更新でルーム消滅
+- **2つのモード** — P2P（サーバーなし）またはセルフホスト（自分のサーバー）
+
+---
 
 [![Vibrissae スクリーンショット](web_ui/public/vibrissae_sm.jpg)](https://lirrensi.github.io/vibrissae/)
 

@@ -2,11 +2,23 @@
 
 Videollamadas P2P sin complicaciones.
 
-[![CI](https://github.com/lirrensi/vibrissae/actions/workflows/ci.yml/badge.svg)](https://github.com/lirrensi/vibrissae/actions/workflows/ci.yml)
-[![Deploy to Pages](https://github.com/lirrensi/vibrissae/actions/workflows/deploy-pages.yml/badge.svg)](https://github.com/lirrensi/vibrissae/actions/workflows/deploy-pages.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+---
 
-**Videollamadas efímeras y ligeras. Sin cuentas. Sin descargas. Abre el enlace → ya estás dentro.**
+## Pruébalo ahora → [lirrensi.github.io/vibrissae](https://lirrensi.github.io/vibrissae)
+
+## Despliega → [DEPLOY.md](DEPLOY.md) (point your AI agent here)
+
+---
+
+## ¿Qué es esto?
+
+**En 10 segundos:** Un chat de video privacidad-first que funciona directamente en tu navegador. Sin cuenta, sin instalar, sin seguimiento. Solo abre un enlace y estás hablando. Usa WebRTC par a par así que tu video nunca toca un servidor (en modo P2P).
+
+- **Cero fricción** — Abre enlace → en llamada
+- **Cero vigilancia** — Sin cuentas, sin telemetría, las salas mueren al actualizar
+- **Dos modos** — P2P (sin servidor) o Autoalojado (tu propio servidor)
+
+---
 
 [![Captura de pantalla de Vibrissae](web_ui/public/vibrissae_sm.jpg)](https://lirrensi.github.io/vibrissae/)
 
@@ -97,7 +109,7 @@ cd server && go run .
 
 ## Documentación
 
-- [Especificación del producto](docs/product.md) — Funciones面向 usuario y modos de despliegue
+- [Especificación del producto](docs/product.md) — Funciones para usuario y modos de despliegue
 - [Referencia de arquitectura](docs/arch.md) — Detalles técnicos, APIs, flujos de datos
 
 ## Pila tecnológica

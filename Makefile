@@ -1,5 +1,7 @@
 # Vibrissae Makefile
 # Build commands for web (Vue) and server (Go)
+#
+# For deployment instructions, see DEPLOY.md
 
 # Version for Go builds - override with: make build VERSION=1.2.3
 VERSION ?= dev
@@ -39,6 +41,26 @@ build-dev: ## Build dev server (reads from dist/ at runtime, no embedding)
 .PHONY: run
 run: build-dev ## Build and run dev server (with live dist/ access)
 	cd $(SERVER_DIR) && ./vibrissae
+
+# -----------------------------------------------------------------------------
+# Docker
+# -----------------------------------------------------------------------------
+
+.PHONY: docker-build
+docker-build: web ## Build Docker image (host network mode)
+	cd $(SERVER_DIR) && docker build --build-arg VERSION=$(VERSION) -t vibrissae:$(VERSION) .
+
+.PHONY: docker-run
+docker-run: ## Run with docker-compose (requires config.json in server/)
+	cd $(SERVER_DIR) && VERSION=$(VERSION) docker compose up -d
+
+.PHONY: docker-stop
+docker-stop: ## Stop docker-compose
+	cd $(SERVER_DIR) && docker compose down
+
+.PHONY: docker-logs
+docker-logs: ## Show docker logs
+	cd $(SERVER_DIR) && docker compose logs -f
 
 # -----------------------------------------------------------------------------
 # Development
