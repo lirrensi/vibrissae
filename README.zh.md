@@ -6,7 +6,7 @@
 
 ## 立即试用 → [lirrensi.github.io/vibrissae](https://lirrensi.github.io/vibrissae)
 
-## 部署 → [DEPLOY.md](DEPLOY.md) (让你的 AI 代理参考这里)
+## 部署 → [DEPLOY.md](docs/DEPLOY.md) (让你的 AI 代理参考这里)
 
 ---
 

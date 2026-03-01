@@ -6,7 +6,7 @@ P2P видеозвонки без ебли.
 
 ## Попробуй сейчас → [lirrensi.github.io/vibrissae](https://lirrensi.github.io/vibrissae)
 
-## Задеплой → [DEPLOY.md](DEPLOY.md) (шли своего AI агента сюда)
+## Задеплой → [DEPLOY.md](docs/DEPLOY.md) (шли своего AI агента сюда)
 
 ---
 

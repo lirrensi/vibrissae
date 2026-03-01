@@ -6,7 +6,7 @@
 
 ## 今すぐ試す → [lirrensi.github.io/vibrissae](https://lirrensi.github.io/vibrissae)
 
-## デプロイ → [DEPLOY.md](DEPLOY.md) (AIエージェント向け)
+## デプロイ → [DEPLOY.md](docs/DEPLOY.md) (AIエージェント向け)
 
 ---
 

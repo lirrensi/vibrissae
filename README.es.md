@@ -6,7 +6,7 @@ Videollamadas P2P sin complicaciones.
 
 ## Pruébalo ahora → [lirrensi.github.io/vibrissae](https://lirrensi.github.io/vibrissae)
 
-## Despliega → [DEPLOY.md](DEPLOY.md) (point your AI agent here)
+## Despliega → [DEPLOY.md](docs/DEPLOY.md) (point your AI agent here)
 
 ---
 

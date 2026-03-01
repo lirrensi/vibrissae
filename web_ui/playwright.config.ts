@@ -17,7 +17,7 @@ const baseConfig = {
   timeout: 120 * 1000, // 2 minutes for P2P connection establishment
   expect: { timeout: 30000 },
   workers: 1, // WebRTC tests need sequential execution
-  reporter: [['list'], ['html', { outputFolder: 'playwright-report' }]],
+  reporter: 'list',
 
   use: {
     baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:8080',
@@ -35,7 +35,7 @@ const baseConfig = {
         '--v=1',
       ],
     },
-  },
+  } as any,
 }
 
 export default defineConfig({

@@ -6,7 +6,7 @@ Full p2p video calls without fuckery.
 
 ## Try it now → [lirrensi.github.io/vibrissae](https://lirrensi.github.io/vibrissae)
 
-## Deploy it → [DEPLOY.md](DEPLOY.md) (point your AI agent here)
+## Deploy it → [DEPLOY.md](docs/DEPLOY.md) (point your AI agent here)
 
 ---
 
@@ -104,7 +104,7 @@ See [docs/product.md](docs/product.md) for deployment configurations (direct, pr
 cd web_ui && pnpm dev
 
 # Terminal 2: Go server (optional, for Self-Hosted mode)
-cd server && go run .
+cd server && go build -o vibrissae . && ./vibrissae
 ```
 
 ## Documentation
