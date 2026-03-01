@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
 import { useRoomStore } from '@/stores/room'
 import { useLogStore } from '@/stores/log'
@@ -16,8 +17,10 @@ import Controls from '@/components/Controls.vue'
 import Chat from '@/components/Chat.vue'
 import TechLog from '@/components/TechLog.vue'
 import ConnectionStatus from '@/components/ConnectionStatus.vue'
+import LanguageSelect from '@/components/LanguageSelect.vue'
 import type { SignalingMessage, JoinAckPayload, PeerJoinedPayload } from '@/types/signaling'
 
+const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const store = useRoomStore()
@@ -53,8 +56,8 @@ function copyLink() {
 // Dynamic page title
 const pageTitle = computed(() => {
   const count = participantCount.value
-  if (count === 1) return 'Waiting...'
-  return `${count} participant${count > 1 ? 's' : ''}`
+  if (count === 1) return t('room.waiting')
+  return t('room.participants', count)
 })
 
 watch(pageTitle, (title) => {
@@ -244,15 +247,18 @@ function leave() {
             @click="copyLink"
             class="text-sm bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded transition-colors"
           >
-            {{ linkCopied ? 'Copied!' : 'Copy Link' }}
+            {{ linkCopied ? t('room.copied') : t('room.copyLink') }}
           </button>
         </div>
-        <ConnectionStatus 
-          :signaling="signaling.connected.value"
-          :signalingOffline="signaling.signalingOffline.value"
-          :reconnectExhausted="signaling.reconnectExhausted.value"
-          :participants="store.participants"
-        />
+        <div class="flex items-center gap-4">
+          <ConnectionStatus 
+            :signaling="signaling.connected.value"
+            :signalingOffline="signaling.signalingOffline.value"
+            :reconnectExhausted="signaling.reconnectExhausted.value"
+            :participants="store.participants"
+          />
+          <LanguageSelect />
+        </div>
       </div>
     </header>
     
@@ -262,7 +268,7 @@ function leave() {
       <div v-if="isLoading" class="flex items-center justify-center h-full w-full">
         <div class="text-center">
           <div class="animate-spin w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full mb-4 mx-auto"></div>
-          <p class="text-gray-400">Connecting...</p>
+          <p class="text-gray-400">{{ t('room.connecting') }}</p>
         </div>
       </div>
       
@@ -271,7 +277,7 @@ function leave() {
         <div class="text-center">
           <p class="text-red-400 mb-4">{{ error }}</p>
           <button @click="leave" class="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded">
-            Go Home
+            {{ t('room.goHome') }}
           </button>
         </div>
       </div>
@@ -292,7 +298,7 @@ function leave() {
             v-if="store.showWarning" 
             class="absolute top-4 left-1/2 -translate-x-1/2 bg-yellow-900/50 text-yellow-200 px-4 py-2 rounded-lg text-sm"
           >
-            High participant count may affect call quality
+            {{ t('room.highParticipantWarning') }}
           </div>
         </div>
         

@@ -1,0 +1,57 @@
+{
+  "app": {
+    "title": "VideoChat",
+    "tagline": "No accounts. No downloads. Just open a link and you're connected.",
+    "footer": "Self-hosted, ephemeral, private"
+  },
+  "home": {
+    "generateLink": "Generate Link",
+    "shareLink": "Share this link:",
+    "copy": "Copy",
+    "copied": "Copied!",
+    "joinThisRoom": "Join This Room",
+    "warning": "Anyone with this link can join your call. There's no password — share only with people you trust.",
+    "generateNew": "Generate a new link instead"
+  },
+  "room": {
+    "copyLink": "Copy Link",
+    "copied": "Copied!",
+    "waiting": "Waiting...",
+    "participants": "{count} participant | {count} participants",
+    "connecting": "Connecting...",
+    "goHome": "Go Home",
+    "highParticipantWarning": "High participant count may affect call quality"
+  },
+  "controls": {
+    "mute": "Mute",
+    "unmute": "Unmute",
+    "cameraOff": "Turn off camera",
+    "cameraOn": "Turn on camera",
+    "deafen": "Deafen",
+    "undeafen": "Undeafen",
+    "leave": "Leave call"
+  },
+  "chat": {
+    "title": "Chat",
+    "placeholder": "Type a message...",
+    "send": "Send",
+    "noMessages": "No messages yet"
+  },
+  "techLog": {
+    "title": "Tech Log",
+    "clear": "Clear",
+    "empty": "No log entries yet",
+    "showData": "Show data",
+    "hideData": "Hide data"
+  },
+  "devices": {
+    "camera": "Camera",
+    "microphone": "Microphone",
+    "speaker": "Speaker",
+    "noDevice": "Device {id}"
+  },
+  "settings": {
+    "title": "Settings",
+    "language": "Language"
+  }
+}

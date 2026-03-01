@@ -1,0 +1,57 @@
+{
+  "app": {
+    "title": "VideoChat",
+    "tagline": "Pas de compte. Pas de téléchargement. Ouvrez un lien et vous êtes connecté.",
+    "footer": "Auto-hébergé, éphémère, privé"
+  },
+  "home": {
+    "generateLink": "Générer un lien",
+    "shareLink": "Partagez ce lien :",
+    "copy": "Copier",
+    "copied": "Copié !",
+    "joinThisRoom": "Rejoindre cette salle",
+    "warning": "Toute personne ayant ce lien peut rejoindre votre appel. Il n'y a pas de mot de passe — partagez-le uniquement avec des personnes de confiance.",
+    "generateNew": "Générer un nouveau lien"
+  },
+  "room": {
+    "copyLink": "Copier le lien",
+    "copied": "Copié !",
+    "waiting": "En attente...",
+    "participants": "{count} participant | {count} participants",
+    "connecting": "Connexion...",
+    "goHome": "Retour à l'accueil",
+    "highParticipantWarning": "Un nombre élevé de participants peut affecter la qualité de l'appel"
+  },
+  "controls": {
+    "mute": "Couper le micro",
+    "unmute": "Activer le micro",
+    "cameraOff": "Éteindre la caméra",
+    "cameraOn": "Allumer la caméra",
+    "deafen": "Se rendre sourd",
+    "undeafen": "Réactiver le son",
+    "leave": "Quitter l'appel"
+  },
+  "chat": {
+    "title": "Chat",
+    "placeholder": "Tapez un message...",
+    "send": "Envoyer",
+    "noMessages": "Pas encore de messages"
+  },
+  "techLog": {
+    "title": "Journal technique",
+    "clear": "Effacer",
+    "empty": "Aucune entrée de journal",
+    "showData": "Afficher les données",
+    "hideData": "Masquer les données"
+  },
+  "devices": {
+    "camera": "Caméra",
+    "microphone": "Microphone",
+    "speaker": "Haut-parleur",
+    "noDevice": "Appareil {id}"
+  },
+  "settings": {
+    "title": "Paramètres",
+    "language": "Langue"
+  }
+}

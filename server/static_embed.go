@@ -1,4 +1,4 @@
-//go:build embed
+//go:build !dev
 
 package main
 
@@ -9,7 +9,8 @@ import (
 )
 
 // embeddedFiles contains the embedded Vue app dist files
-// This is only included when building with -tags embed
+// This is included by default (production build).
+// Use -tags dev to build without embedding (filesystem mode).
 //
 //go:embed dist/*
 var embeddedFiles embed.FS

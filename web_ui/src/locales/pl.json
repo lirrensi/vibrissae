@@ -1,0 +1,57 @@
+{
+  "app": {
+    "title": "VideoChat",
+    "tagline": "Bez kont. Bez pobierania. Po prostu otwórz link i jesteś połączony.",
+    "footer": "Samodzielnie hostowany, efemeryczny, prywatny"
+  },
+  "home": {
+    "generateLink": "Wygeneruj link",
+    "shareLink": "Udostępnij ten link:",
+    "copy": "Kopiuj",
+    "copied": "Skopiowano!",
+    "joinThisRoom": "Dołącz do tego pokoju",
+    "warning": "Każdy z tym linkiem może dołączyć do Twojego połączenia. Nie ma hasła — udostępniaj tylko zaufanym osobom.",
+    "generateNew": "Wygeneruj nowy link"
+  },
+  "room": {
+    "copyLink": "Kopiuj link",
+    "copied": "Skopiowano!",
+    "waiting": "Oczekiwanie...",
+    "participants": "{count} uczestnik | {count} uczestników",
+    "connecting": "Łączenie...",
+    "goHome": "Wróć do strony głównej",
+    "highParticipantWarning": "Duża liczba uczestników może wpłynąć na jakość połączenia"
+  },
+  "controls": {
+    "mute": "Wycisz",
+    "unmute": "Włącz dźwięk",
+    "cameraOff": "Wyłącz kamerę",
+    "cameraOn": "Włącz kamerę",
+    "deafen": "Wycisz wszystko",
+    "undeafen": "Przywróć dźwięk",
+    "leave": "Opuść połączenie"
+  },
+  "chat": {
+    "title": "Czat",
+    "placeholder": "Napisz wiadomość...",
+    "send": "Wyślij",
+    "noMessages": "Brak wiadomości"
+  },
+  "techLog": {
+    "title": "Dziennik techniczny",
+    "clear": "Wyczyść",
+    "empty": "Brak wpisów",
+    "showData": "Pokaż dane",
+    "hideData": "Ukryj dane"
+  },
+  "devices": {
+    "camera": "Kamera",
+    "microphone": "Mikrofon",
+    "speaker": "Głośnik",
+    "noDevice": "Urządzenie {id}"
+  },
+  "settings": {
+    "title": "Ustawienia",
+    "language": "Język"
+  }
+}

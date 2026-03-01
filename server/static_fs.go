@@ -1,4 +1,4 @@
-//go:build !embed
+//go:build dev
 
 package main
 
@@ -9,7 +9,7 @@ import (
 )
 
 // getStaticFS returns the filesystem-based handler for development builds
-// This is used when NOT building with -tags embed
+// Use -tags dev to enable this mode (reads from dist/ folder at runtime)
 func getStaticFS() http.FileSystem {
 	// Try to find the dist directory in order of preference:
 	// 1. ./dist (running from server directory, after npm run build from web_ui)

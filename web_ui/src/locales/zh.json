@@ -1,0 +1,57 @@
+{
+  "app": {
+    "title": "VideoChat",
+    "tagline": "无需账号，无需下载。打开链接即可连接。",
+    "footer": "自托管、临时、私密"
+  },
+  "home": {
+    "generateLink": "生成链接",
+    "shareLink": "分享此链接：",
+    "copy": "复制",
+    "copied": "已复制！",
+    "joinThisRoom": "加入此房间",
+    "warning": "任何拥有此链接的人都可以加入您的通话。没有密码——只分享给信任的人。",
+    "generateNew": "生成新链接"
+  },
+  "room": {
+    "copyLink": "复制链接",
+    "copied": "已复制！",
+    "waiting": "等待中...",
+    "participants": "{count} 位参与者",
+    "connecting": "连接中...",
+    "goHome": "返回主页",
+    "highParticipantWarning": "参与者过多可能影响通话质量"
+  },
+  "controls": {
+    "mute": "静音",
+    "unmute": "取消静音",
+    "cameraOff": "关闭摄像头",
+    "cameraOn": "开启摄像头",
+    "deafen": "关闭声音",
+    "undeafen": "开启声音",
+    "leave": "离开通话"
+  },
+  "chat": {
+    "title": "聊天",
+    "placeholder": "输入消息...",
+    "send": "发送",
+    "noMessages": "暂无消息"
+  },
+  "techLog": {
+    "title": "技术日志",
+    "clear": "清除",
+    "empty": "暂无日志",
+    "showData": "显示数据",
+    "hideData": "隐藏数据"
+  },
+  "devices": {
+    "camera": "摄像头",
+    "microphone": "麦克风",
+    "speaker": "扬声器",
+    "noDevice": "设备 {id}"
+  },
+  "settings": {
+    "title": "设置",
+    "language": "语言"
+  }
+}

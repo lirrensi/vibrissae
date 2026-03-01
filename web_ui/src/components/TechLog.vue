@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { ref, nextTick, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
 import { useLogStore, type LogEntry } from '@/stores/log'
 
+const { t } = useI18n()
 const logStore = useLogStore()
 const { entries } = storeToRefs(logStore)
 
@@ -62,20 +64,20 @@ watch(() => entries.value.length, async () => {
   <div class="flex flex-col h-full bg-gray-800 rounded-lg">
     <!-- Header -->
     <div class="flex items-center justify-between p-2 border-b border-gray-700">
-      <span class="text-sm font-semibold text-gray-300">Tech Log</span>
+      <span class="text-sm font-semibold text-gray-300">{{ t('techLog.title') }}</span>
       <button 
         @click="clearLog"
         class="text-xs text-gray-500 hover:text-gray-300 px-2 py-1 rounded hover:bg-gray-700"
-        title="Clear log"
+        :title="t('techLog.clear')"
       >
-        Clear
+        {{ t('techLog.clear') }}
       </button>
     </div>
     
     <!-- Log entries -->
     <div ref="container" class="flex-1 overflow-y-auto p-2 text-xs font-mono space-y-1">
       <div v-if="entries.length === 0" class="text-gray-500 text-center py-4">
-        No log entries yet
+        {{ t('techLog.empty') }}
       </div>
       <div 
         v-for="entry in entries" 
@@ -94,7 +96,7 @@ watch(() => entries.value.length, async () => {
             @click="toggleExpand(entry.id)"
             class="text-gray-500 hover:text-gray-400 underline"
           >
-            {{ expandedIds.has(entry.id) ? '▼ Hide' : '▶ Show' }} data
+            {{ expandedIds.has(entry.id) ? '▼ ' + t('techLog.hideData') : '▶ ' + t('techLog.showData') }}
           </button>
           <pre 
             v-if="expandedIds.has(entry.id)"

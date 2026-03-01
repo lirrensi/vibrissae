@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { ref, nextTick, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import type { ChatMessage } from '@/composables/useChat'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   messages: ChatMessage[]
@@ -48,13 +51,13 @@ watch(() => props.messages.length, async () => {
   <div class="flex flex-col h-full bg-gray-800 rounded-lg">
     <!-- Header -->
     <div class="flex items-center p-2 border-b border-gray-700">
-      <span class="text-sm font-semibold text-gray-300">Chat</span>
+      <span class="text-sm font-semibold text-gray-300">{{ t('chat.title') }}</span>
     </div>
     
     <!-- Messages -->
     <div ref="messagesContainer" data-testid="chat-messages" class="flex-1 overflow-y-auto p-3 space-y-2">
       <div v-if="messages.length === 0" class="text-center text-gray-500 text-sm mt-8">
-        No messages yet
+        {{ t('chat.noMessages') }}
       </div>
       <div
         v-for="msg in messages"
@@ -84,7 +87,7 @@ watch(() => props.messages.length, async () => {
           v-model="inputText"
           data-testid="chat-input"
           type="text"
-          placeholder="Type a message..."
+          :placeholder="t('chat.placeholder')"
           class="flex-1 bg-gray-700 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
         />
         <button
@@ -92,7 +95,7 @@ watch(() => props.messages.length, async () => {
           data-testid="chat-send"
           class="px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm transition-colors"
         >
-          Send
+          {{ t('chat.send') }}
         </button>
       </form>
     </div>

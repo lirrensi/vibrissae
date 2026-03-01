@@ -116,4 +116,10 @@ cd server && go run .
 
 ---
 
+## Languages
+
+[English](README.md) · [Español](README.es.md) · [中文](README.zh.md) · [日本語](README.ja.md) · [Русский](README.ru.md)
+
+---
+
 *Named after the sensitive whiskers cats use to navigate — because finding your friends should be just as intuitive.*

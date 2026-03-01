@@ -1,0 +1,57 @@
+{
+  "app": {
+    "title": "VideoChat",
+    "tagline": "Sin cuentas. Sin descargas. Solo abre un enlace y estás conectado.",
+    "footer": "Autohospedado, efímero, privado"
+  },
+  "home": {
+    "generateLink": "Generar enlace",
+    "shareLink": "Comparte este enlace:",
+    "copy": "Copiar",
+    "copied": "¡Copiado!",
+    "joinThisRoom": "Unirse a esta sala",
+    "warning": "Cualquier persona con este enlace puede unirse a tu llamada. No hay contraseña — compártelo solo con personas de confianza.",
+    "generateNew": "Generar un nuevo enlace"
+  },
+  "room": {
+    "copyLink": "Copiar enlace",
+    "copied": "¡Copiado!",
+    "waiting": "Esperando...",
+    "participants": "{count} participante | {count} participantes",
+    "connecting": "Conectando...",
+    "goHome": "Ir a inicio",
+    "highParticipantWarning": "Un alto número de participantes puede afectar la calidad de la llamada"
+  },
+  "controls": {
+    "mute": "Silenciar",
+    "unmute": "Activar sonido",
+    "cameraOff": "Apagar cámara",
+    "cameraOn": "Encender cámara",
+    "deafen": "Ensordecerse",
+    "undeafen": "Desensordecerse",
+    "leave": "Dejar llamada"
+  },
+  "chat": {
+    "title": "Chat",
+    "placeholder": "Escribe un mensaje...",
+    "send": "Enviar",
+    "noMessages": "Sin mensajes aún"
+  },
+  "techLog": {
+    "title": "Registro técnico",
+    "clear": "Limpiar",
+    "empty": "Sin entradas de registro",
+    "showData": "Mostrar datos",
+    "hideData": "Ocultar datos"
+  },
+  "devices": {
+    "camera": "Cámara",
+    "microphone": "Micrófono",
+    "speaker": "Altavoz",
+    "noDevice": "Dispositivo {id}"
+  },
+  "settings": {
+    "title": "Configuración",
+    "language": "Idioma"
+  }
+}
