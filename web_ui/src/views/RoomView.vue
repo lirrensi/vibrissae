@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue'
+import { onMounted, onUnmounted, ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useRoomStore } from '@/stores/room'
@@ -29,6 +29,7 @@ store.setRoom(roomId)
 
 const isLoading = ref(true)
 const error = ref<string | null>(null)
+const linkCopied = ref(false)
 
 // Create composables
 const signaling = useSignaling(roomId)
@@ -38,6 +39,42 @@ const chat = useChat(webrtc)
 const audioAnalyzer = useAudioAnalyzer(localStream)
 const speakerDetection = useSpeakerDetection(participants)
 const deafen = useDeafen(participants)
+
+// Computed values for UI
+const participantCount = computed(() => participants.value.size + 1) // +1 for self
+const roomLink = computed(() => window.location.href)
+
+function copyLink() {
+  navigator.clipboard.writeText(roomLink.value)
+  linkCopied.value = true
+  setTimeout(() => { linkCopied.value = false }, 2000)
+}
+
+// Dynamic page title
+const pageTitle = computed(() => {
+  const count = participantCount.value
+  if (count === 1) return 'Waiting...'
+  return `${count} participant${count > 1 ? 's' : ''}`
+})
+
+watch(pageTitle, (title) => {
+  document.title = `${title} • Vibrissae`
+}, { immediate: true })
+
+// Before unload warning
+function handleBeforeUnload(e: BeforeUnloadEvent) {
+  e.preventDefault()
+  e.returnValue = 'You will leave the call. Are you sure?'
+  return e.returnValue
+}
+
+onMounted(() => {
+  window.addEventListener('beforeunload', handleBeforeUnload)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('beforeunload', handleBeforeUnload)
+})
 
 // Define message handler (now webrtc is available)
 function handleSignalingMessage(msg: SignalingMessage) {
@@ -201,7 +238,15 @@ function leave() {
     <!-- Header -->
     <header class="flex-none p-4 border-b border-gray-800">
       <div class="flex items-center justify-between">
-        <h1 class="text-xl font-semibold">Vibrissae</h1>
+        <div class="flex items-center gap-4">
+          <h1 class="text-xl font-semibold">Vibrissae</h1>
+          <button
+            @click="copyLink"
+            class="text-sm bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded transition-colors"
+          >
+            {{ linkCopied ? 'Copied!' : 'Copy Link' }}
+          </button>
+        </div>
         <ConnectionStatus 
           :signaling="signaling.connected.value"
           :signalingOffline="signaling.signalingOffline.value"

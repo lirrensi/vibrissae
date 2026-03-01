@@ -71,8 +71,11 @@ export function useSignaling(options: UseSignalingOptions | string) {
     if (providedTransport) {
       transport = providedTransport
     } else {
-      // Use factory to auto-detect mode
-      transport = await createTransport({ roomId })
+      // Use factory to auto-detect mode - enable both Trystero and GunJS for parallel redundancy
+      transport = await createTransport({ 
+        roomId,
+        providers: ['trystero', 'gun']
+      })
     }
 
     // Set up message routing

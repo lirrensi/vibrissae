@@ -1,24 +1,32 @@
 import { useLogStore } from '@/stores/log'
-import type { P2PConfig, TorrentConfig, NostrConfig, MQTTConfig, IPFSConfig } from '@/types/p2p-config'
+import type { P2PConfig, TorrentConfig, NostrConfig, MQTTConfig, IPFSConfig, GunConfig } from '@/types/p2p-config'
 
 // Fallback defaults (used when external config not found)
 const defaultConfig: P2PConfig = {
   version: 1,
   transports: {
-    priority: ['nostr', 'torrent', 'mqtt', 'ipfs'],
+    priority: ['torrent', 'mqtt', 'ipfs'],
     torrent: {
       enabled: true,
       announce: ['wss://tracker.openwebtorrent.com', 'wss://tracker.webtorrent.dev']
     },
     nostr: {
-      enabled: true,
-      relays: ['wss://relay.damus.io', 'wss://nostr.mom']
+      enabled: false,
+      relays: []
     },
     mqtt: {
       enabled: true
     },
     ipfs: {
       enabled: true
+    },
+    gun: {
+      enabled: true,
+      peers: [
+        'https://gun-manhattan.herokuapp.com/gun',
+        'https://try.axe.eco/gun',
+        'https://test.era.eco/gun'
+      ]
     }
   },
   iceServers: [
@@ -104,6 +112,7 @@ function mergeWithDefaults(config: Partial<P2PConfig>): P2PConfig {
   const nc = config.transports?.nostr
   const mc = config.transports?.mqtt
   const ic = config.transports?.ipfs
+  const gc = config.transports?.gun
 
   return {
     version: config.version ?? defaultConfig.version,
@@ -124,7 +133,11 @@ function mergeWithDefaults(config: Partial<P2PConfig>): P2PConfig {
       ipfs: {
         enabled: ic?.enabled ?? true,
         bootstrap: ic?.bootstrap
-      } as IPFSConfig
+      } as IPFSConfig,
+      gun: {
+        enabled: gc?.enabled ?? defaultConfig.transports.gun!.enabled,
+        peers: gc?.peers ?? defaultConfig.transports.gun!.peers
+      } as GunConfig
     },
     iceServers: config.iceServers ?? defaultConfig.iceServers,
     signaling: {

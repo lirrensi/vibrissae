@@ -1,3 +1,6 @@
 export { createWebSocketTransport } from './WebSocketTransport'
 export { createTrysteroTransport, type TrysteroTransportOptions } from './TrysteroTransport'
-export { createTransport, createWebSocketTransportSync, type TransportMode } from './factory'
+export { createGunJSTransport, type GunJSTransportOptions } from './GunJSTransport'
+export { createCombinedTransport, type CombinedTransportConfig } from './CombinedTransport'
+export { createP2PSignalingProtocol, type SignalingTransport as P2PSignalingTransport } from './P2PSignalingProtocol'
+export { createTransport, createWebSocketTransportSync, type TransportMode, type P2PProvider } from './factory'

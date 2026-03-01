@@ -59,7 +59,7 @@ Do you want to run your own server?
 
 ### P2P Signaling Backends
 
-Trystero supports multiple decentralized backends. All enabled backends connect in parallel; first success wins.
+The transport layer is pluggable. Multiple backends can run in parallel for redundancy — messages broadcast via all enabled transports.
 
 | Backend | Bundle Size | Notes |
 |---------|-------------|-------|
@@ -67,6 +67,9 @@ Trystero supports multiple decentralized backends. All enabled backends connect 
 | **BitTorrent** | 5K | WebTorrent trackers — fallback option |
 | **MQTT** | 75K | Public MQTT brokers |
 | **IPFS** | 119K | DHT-based discovery |
+| **GunJS** | ~50K | Decentralized graph database — implemented |
+
+**Architecture**: Transports are implemented as plugins implementing the `MessageTransport` interface. The signaling protocol (handshake, initiator election, message routing) is decoupled from the transport, making it easy to add new backends. Multiple transports can be combined via `CombinedTransport` for fallback redundancy.
 
 **Not supported:**
 - Supabase, Firebase — require account setup (violates "no accounts" principle)
@@ -87,7 +90,15 @@ P2P behavior is controlled by `p2p-config.json` (optional — defaults work out 
     "nostr": {
       "enabled": true,
       "relays": ["wss://relay.damus.io"]
+    },
+    "gun": {
+      "enabled": true,
+      "peers": ["https://gun-manhattan.herokuapp.com/gun"]
     }
+  },
+  "signaling": {
+    "resendIntervalMs": 2000,
+    "resendMaxAttempts": 5
   },
   "iceServers": [
     { "urls": "stun:stun.l.google.com:19302" },
@@ -96,6 +107,18 @@ P2P behavior is controlled by `p2p-config.json` (optional — defaults work out 
   ]
 }
 ```
+
+**Using Multiple Transports:** To run multiple transports in parallel (e.g., Trystero + GunJS), specify them in code:
+
+```typescript
+// Run both Trystero and GunJS in parallel
+await createTransport({ 
+  roomId, 
+  providers: ['trystero', 'gun'] 
+})
+```
+
+Both transports will be combined via `CombinedTransport` — messages broadcast to all, peer discovery merges from both.
 
 **ICE Servers**: The config defines STUN/TURN servers used for NAT traversal. At least one STUN server is required; TURN servers are optional but recommended for users behind symmetric NAT.
 
@@ -262,6 +285,24 @@ That's it. No accounts, no configuration, no app installs.
 - **No telemetry** — nothing leaves the server
 - **Single binary** — Go server + embedded Vue app, one file to deploy
 - **P2P-first** — direct browser-to-browser, server only for signaling and TURN fallback
+
+---
+
+## Security Model
+
+**Access control is based on link secrecy, not passwords.**
+
+- Room IDs are 128-bit UUIDs (not guessable)
+- Anyone with the room link can join — no password required
+- No server-side access logs or participant history
+- This is the same model as Google Meet, Zoom personal links, or Jitsi
+
+**What this means:**
+- Share the link only with people you trust
+- Anyone who has the link can share it further
+- There is no "kick" or "ban" feature — rooms are fully open
+
+If you need stricter access control, self-host behind a reverse proxy with authentication.
 
 ---
 

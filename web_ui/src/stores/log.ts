@@ -4,7 +4,7 @@ import { defineStore } from 'pinia'
 export interface LogEntry {
   id: number
   timestamp: Date
-  category: 'signaling' | 'webrtc' | 'ice' | 'datachannel' | 'system' | 'roomview'
+  category: 'signaling' | 'webrtc' | 'ice' | 'datachannel' | 'system' | 'roomview' | 'transport'
   level: 'info' | 'warn' | 'error'
   message: string
   data?: Record<string, unknown>

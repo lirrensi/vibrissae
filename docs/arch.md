@@ -72,15 +72,19 @@ VideoChat/
 │   │   │   ├── useSignaling.js   # Signaling abstraction
 │   │   │   └── useDevices.js     # Media device enumeration
 │   │   ├── transports/
-│   │   │   ├── index.ts          # Re-exports
-│   │   │   ├── factory.ts        # Auto-detects mode, creates transport
-│   │   │   ├── WebSocketTransport.ts  # Server-hosted signaling
-│   │   │   └── TrysteroTransport.ts   # P2P signaling (multi-backend)
+│   │   │   ├── index.ts                    # Re-exports
+│   │   │   ├── factory.ts                  # Creates transport stack based on mode
+│   │   │   ├── WebSocketTransport.ts       # Server-hosted signaling
+│   │   │   ├── TrysteroTransport.ts        # MessageTransport impl for Trystero
+│   │   │   ├── GunJSTransport.ts           # MessageTransport impl for GunJS
+│   │   │   ├── CombinedTransport.ts        # Merges multiple transports
+│   │   │   └── P2PSignalingProtocol.ts     # Signaling logic layer
 │   │   ├── utils/
 │   │   │   ├── uuid.js           # UUID generation
 │   │   │   └── p2p-config-loader.ts  # Load P2P config
 │   │   └── types/
-│   │       ├── transport.ts      # SignalingTransport interface
+│   │       ├── transport.ts      # MessageTransport & SignalingTransport interfaces
+│   │       ├── signaling.ts      # Signaling message types
 │   │       └── p2p-config.ts     # P2P config types
 │   ├── public/
 │   │   ├── p2p-config.json       # P2P configuration
@@ -138,78 +142,237 @@ const isServer = mode === 'server'
 
 ## Transport Architecture
 
+The transport layer is split into two abstraction levels, allowing new signaling backends to be added with minimal code.
+
+### Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     useWebRTC.ts                            │
+│         (WebRTC connections, offer/answer/ice)              │
+└──────────────────────────┬──────────────────────────────────┘
+                           │ send()
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│                     useSignaling.ts                         │
+│         (handles join-ack, peer-joined, peer-left)          │
+└──────────────────────────┬──────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│              P2PSignalingProtocol (NEW)                     │
+│  Transport-agnostic signaling logic:                        │
+│  • Hello exchange handshake                                 │
+│  • Initiator election (lexicographic UUID compare)          │
+│  • Peer ID mapping (transportPeerId → participantId)        │
+│  • Self-message filtering                                   │
+│  • Message routing to correct recipient                     │
+│  • Resend logic for reliable delivery                       │
+└──────────────────────────┬──────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│              MessageTransport Interface                     │
+│  Pure message passing - NO signaling logic:                 │
+│  • connect() / disconnect()                                 │
+│  • broadcast(message)                                       │
+│  • sendTo(peerId, message)                                  │
+│  • onMessage(callback)                                      │
+│  • onPeerJoin(callback) / onPeerLeave(callback)             │
+│                                                             │
+│  Implementations:                                           │
+│  ┌───────────┬───────────┬───────────┬───────────┬─────────┐│
+│  │ Trystero  │   GunJS   │ WebSocket │  Custom   │Combined ││
+│  │ Transport │ Transport │ Transport │  Relay    │Transport││
+│  │           │ (impl.)   │  (server) │ (future)  │(multi)  ││
+│  └───────────┴───────────┴───────────┴───────────┴─────────┘│
+└─────────────────────────────────────────────────────────────┘
+```
+
+### MessageTransport Interface
+
+Low-level message transport. Implementations handle only peer discovery and message passing — no signaling logic.
+
+```typescript
+// types/transport.ts
+interface TransportMessage {
+  type: string
+  payload: unknown
+}
+
+interface MessageTransport {
+  // Connection state
+  connected: Ref<boolean>
+  selfId: string  // Transport-level peer ID (e.g., Trystero peerId)
+  
+  // Lifecycle
+  connect(): Promise<void>
+  disconnect(): void
+  
+  // Messaging
+  broadcast(message: TransportMessage): void
+  sendTo(peerId: string, message: TransportMessage): void
+  
+  // Events
+  onMessage(handler: (msg: TransportMessage, fromPeerId: string) => void): void
+  onPeerJoin(handler: (peerId: string) => void): void
+  onPeerLeave(handler: (peerId: string) => void): void
+}
+```
+
 ### SignalingTransport Interface
 
-Both WebSocket and Trystero transports implement the same interface:
+High-level signaling transport. Wraps `MessageTransport` with P2P handshake protocol.
 
 ```typescript
 // types/transport.ts
 interface SignalingTransport {
-  // Connection state
-  connected: boolean
-  participantId: string | null
+  connected: Ref<boolean>
+  participantId: Ref<string | null>  // Application-level participant ID
   
-  // Events
-  onJoin: (callback: JoinCallback) => void
-  onPeerJoined: (callback: PeerJoinedCallback) => void
-  onPeerLeft: (callback: PeerLeftCallback) => void
-  onOffer: (callback: OfferCallback) => void
-  onAnswer: (callback: AnswerCallback) => void
-  onIceCandidate: (callback: IceCandidateCallback) => void
-  onError: (callback: ErrorCallback) => void
-  
-  // Actions
-  connect(): Promise<void>
-  sendOffer(to: string, offer: RTCSessionDescriptionInit): void
-  sendAnswer(to: string, answer: RTCSessionDescriptionInit): void
-  sendIceCandidate(to: string, candidate: RTCIceCandidateInit): void
+  connect(): void
   disconnect(): void
+  send(message: SignalingMessage): void
+  onMessage(handler: (msg: SignalingMessage) => void): void
 }
+```
+
+### P2PSignalingProtocol
+
+Wraps any `MessageTransport` to provide standardized P2P signaling:
+
+```typescript
+// transports/P2PSignalingProtocol.ts
+export function createP2PSignalingProtocol(
+  transport: MessageTransport,
+  config: P2PSignalingConfig
+): SignalingTransport {
+  // Generates participantId (UUID)
+  // Implements hello handshake
+  // Handles initiator election
+  // Routes messages by 'to' field
+  // Filters self-messages
+  // Implements resend logic
+}
+```
+
+**Handshake Protocol:**
+
+```
+Peer A                      MessageTransport                      Peer B
+  │                               │                                   │
+  │──── hello (participantId) ───>│──── hello (participantId) ──────>│
+  │<─── hello (participantId) ────│<─── hello (participantId) ──────│
+  │                               │                                   │
+  │  Compare UUIDs: smaller = initiator                              │
+  │                               │                                   │
+  │==== WebRTC Offer (initiator) ====================================>│
+  │<=== WebRTC Answer (non-initiator) ===============================│
+  │                               │                                   │
+  │================ ICE Candidates =================================>│
+  │<=============== ICE Candidates ==================================│
 ```
 
 ### Transport Factory
 
-Auto-detects operating mode and creates appropriate transport:
+Creates the appropriate transport stack based on mode and supports multiple P2P providers running in parallel:
 
 ```typescript
 // transports/factory.ts
 export type TransportMode = 'auto' | 'websocket' | 'p2p'
+export type P2PProvider = 'trystero' | 'gun'
+
+interface CreateTransportOptions {
+  roomId: string
+  mode?: TransportMode
+  /** P2P providers to use in parallel. Default: ['trystero'] */
+  providers?: P2PProvider[]
+}
 
 export async function createTransport(options: CreateTransportOptions): Promise<SignalingTransport> {
-  const { roomId, mode = 'auto' } = options
-  
+  const { roomId, mode = 'auto', providers = ['trystero'] } = options
   const effectiveMode = determineMode(mode)
   
   switch (effectiveMode) {
     case 'websocket':
       return createWebSocketTransport(roomId)
-    case 'p2p':
+    case 'p2p': {
       const config = await loadP2PConfig()
-      return createTrysteroTransport({ roomId, config })
+      
+      // Create message transports for each provider
+      const transports: MessageTransport[] = []
+      for (const provider of providers) {
+        switch (provider) {
+          case 'trystero':
+            transports.push(createTrysteroTransport({ roomId, config }))
+            break
+          case 'gun':
+            if (config.transports.gun?.enabled) {
+              transports.push(createGunJSTransport({ roomId, peers: config.transports.gun.peers }))
+            }
+            break
+        }
+      }
+      
+      // Merge multiple transports into one
+      const messageTransport = transports.length === 1 
+        ? transports[0] 
+        : createCombinedTransport(transports)
+      
+      return createP2PSignalingProtocol(messageTransport, config.signaling)
+    }
   }
-}
-
-function determineMode(requestedMode: TransportMode): 'websocket' | 'p2p' {
-  if (requestedMode === 'websocket') return 'websocket'
-  if (requestedMode === 'p2p') return 'p2p'
-  
-  // Auto-detect: server-injected config means WebSocket mode
-  if (window.__CONFIG__) {
-    return 'websocket'
-  }
-  
-  return 'p2p'
 }
 ```
 
 ### Mode Detection Logic
 
-| Condition | Transport |
-|-----------|-----------|
-| `mode: 'websocket'` | WebSocket (explicit) |
-| `mode: 'p2p'` | Trystero (explicit) |
-| `mode: 'auto'` + `window.__CONFIG__` exists | WebSocket (Self-Hosted) |
-| `mode: 'auto'` + no `window.__CONFIG__` | Trystero (Web Bundle) |
+| Condition | Transport Stack |
+|-----------|-----------------|
+| `mode: 'websocket'` | WebSocketTransport (direct) |
+| `mode: 'p2p'` + 1 provider | Single MessageTransport → P2PSignalingProtocol |
+| `mode: 'p2p'` + multiple providers | CombinedTransport (merged) → P2PSignalingProtocol |
+| `mode: 'auto'` + `window.__CONFIG__` exists | WebSocketTransport (Self-Hosted) |
+| `mode: 'auto'` + no `window.__CONFIG__` | TrysteroTransport → P2PSignalingProtocol (Web Bundle) |
+
+### CombinedTransport
+
+When multiple P2P providers are enabled, `CombinedTransport` merges them:
+
+- `broadcast()` → sends to ALL transports
+- `sendTo()` → sends via ALL transports
+- `onPeerJoin` → fires when ANY transport discovers a peer
+- `onMessage` → fires when ANY transport receives a message
+- `connected` → true when FIRST transport connects
+
+This provides redundancy: if one transport fails, others still work.
+
+### Adding New Transports
+
+To add a new transport:
+
+1. Implement `MessageTransport` interface in `transports/NewTransport.ts`
+2. Add config type to `types/p2p-config.ts`
+3. Register in factory's provider switch
+
+```typescript
+// Example: NewTransport.ts
+export function createNewTransport(options: NewTransportOptions): MessageTransport {
+  return {
+    connected: ref(false),
+    selfId: crypto.randomUUID(),
+    connect: async () => { /* ... */ },
+    disconnect: () => { /* ... */ },
+    broadcast: (msg) => { /* ... */ },
+    sendTo: (peerId, msg) => { /* ... */ },
+    onMessage: (handler) => { /* ... */ },
+    onPeerJoin: (handler) => { /* ... */ },
+    onPeerLeave: (handler) => { /* ... */ }
+  }
+}
+```
+
+No changes to signaling protocol, useWebRTC, or useSignaling required.
 
 ---
 
@@ -351,9 +514,24 @@ func (c *Config) Validate() error {
 
 ## P2P Signaling (Trystero)
 
-When no server is available (Web Bundle mode), Vibrissae uses Trystero for serverless P2P signaling.
+When no server is available (Web Bundle mode), Vibrissae uses Trystero for serverless P2P signaling. TrysteroTransport implements `MessageTransport` — pure message passing without signaling logic.
+
+### TrysteroTransport
+
+Implements `MessageTransport` interface:
+
+```typescript
+// transports/TrysteroTransport.ts
+export function createTrysteroTransport(config: P2PConfig, roomId: string): MessageTransport {
+  // Joins Trystero room with configured backends
+  // Provides: broadcast(), sendTo(), onMessage, onPeerJoin, onPeerLeave
+  // selfId = Trystero peer ID
+}
+```
 
 ### Supported Backends
+
+**Trystero (built-in):**
 
 | Backend | Import | Bundle Size | Config Key |
 |---------|--------|-------------|------------|
@@ -362,7 +540,13 @@ When no server is available (Web Bundle mode), Vibrissae uses Trystero for serve
 | **MQTT** | `trystero/mqtt` | 75K | `mqtt` |
 | **IPFS** | `trystero/ipfs` | 119K | `ipfs` |
 
-**Priority**: Nostr is prioritized over BitTorrent per product requirements.
+**Additional P2P Transport:**
+
+| Backend | Package | Bundle Size | Config Key |
+|---------|---------|-------------|------------|
+| **GunJS** | `gun` | ~50K | `gun` |
+
+**Priority**: Nostr is prioritized over BitTorrent per product requirements. GunJS runs alongside Trystero for redundancy.
 
 ### P2P Config Schema
 
@@ -376,15 +560,21 @@ interface P2PConfig {
     nostr?: NostrConfig
     mqtt?: MQTTConfig
     ipfs?: IPFSConfig
+    gun?: GunConfig
   }
-  signaling?: {
+  signaling: {
     resendIntervalMs: number
     resendMaxAttempts: number
   }
-  iceServers?: RTCIceServer[]
+  iceServers?: IceServer[]
 }
 
-type TransportType = 'torrent' | 'nostr' | 'mqtt' | 'ipfs'
+type TransportType = 'torrent' | 'nostr' | 'mqtt' | 'ipfs' | 'gun'
+
+interface GunConfig {
+  enabled: boolean
+  peers?: string[]  // Gun relay peers to connect to
+}
 ```
 
 ### Default Configuration
@@ -416,7 +606,7 @@ type TransportType = 'torrent' | 'nostr' | 'mqtt' | 'ipfs'
 
 ### Happy Eyeballs Connection
 
-All enabled transports connect in parallel. First successful connection wins:
+All enabled backends connect in parallel. First successful connection wins:
 
 ```typescript
 // TrysteroTransport.ts
@@ -426,6 +616,21 @@ const promises = config.transports.priority.map(async (type) => {
   }
 })
 Promise.all(promises)
+```
+
+### Trystero Backend Config
+
+Each backend has its own config section in `p2p-config.json`:
+
+```typescript
+// types/p2p-config.ts
+type TransportType = 'torrent' | 'nostr' | 'mqtt' | 'ipfs' | 'gun'  // 'gun' added for GunJS
+
+interface TorrentConfig { enabled: boolean; announce?: string[] }
+interface NostrConfig { enabled: boolean; relays?: string[] }
+interface MQTTConfig { enabled: boolean; url?: string }
+interface IPFSConfig { enabled: boolean; bootstrap?: string[] }
+interface GunConfig { enabled: boolean; peers?: string[] }  // For GunJS
 ```
 
 ### Config Loading
@@ -444,48 +649,87 @@ export function getIceServers(): Promise<RTCIceServer[]> {
 }
 ```
 
-### P2P Handshake Protocol
+**Why Trystero?** Trystero provides peer discovery via decentralized networks. The P2PSignalingProtocol layer adds the structured handshake needed for WebRTC on top of Trystero's message passing.
 
-In P2P mode (Web Bundle), we use a custom handshake over Trystero's data rooms:
+---
 
-```
-Peer A                      Trystero Data Room                      Peer B
-  │                               │                                   │
-  │──── hello (participantId) ───>│──── hello (participantId) ──────>│
-  │<─── hello (participantId) ────│<─── hello (participantId) ──────│
-  │                               │                                   │
-  │  Compare UUIDs: smaller = initiator                              │
-  │                               │                                   │
-  │==== WebRTC Offer (initiator) ====================================>│
-  │<=== WebRTC Answer (non-initiator) ===============================│
-  │                               │                                   │
-  │================ ICE Candidates =================================>│
-  │<=============== ICE Candidates ==================================│
-```
+## P2P Signaling (GunJS)
 
-**Key Implementation Details:**
+GunJS is an additional P2P transport that runs alongside Trystero for redundancy. Unlike Trystero's relay-based model, GunJS uses a decentralized graph database with automatic mesh networking.
 
-1. **Hello Exchange**: Both peers broadcast a hello message containing their `participantId` (UUID)
-2. **Initiator Election**: Peer with lexicographically smaller UUID initiates the WebRTC connection
-3. **Self-Message Filtering**: TrysteroTransport filters out messages where `participantId` matches our own
-4. **participantId Sync**: The participantId is synced to the room store for consistency across components
+### How It Works
 
-**Why custom handshake?** Trystero provides peer discovery but not the structured signaling flow needed for WebRTC. We layer our own protocol on top of Trystero's action/room system.
+GunJS provides persistent data sync across peers:
+- **Room data**: `gun.get(roomId)` — shared namespace for all room participants
+- **Broadcast**: `gun.get(roomId).get('broadcast').get(msgId).put(message)` — all peers receive
+- **Direct messages**: `gun.get(roomId).get('direct').get(peerId).put(message)` — only target peer receives
+- **Peer discovery**: Listens to GunJS `hi`/`bye` events + tracks peers from incoming messages
+
+### GunJSTransport Implementation
 
 ```typescript
-// TrysteroTransport.ts - Hello message format
-interface HelloMessage {
-  type: 'hello'
-  participantId: string
-  initiatorId: string  // Will be determined after both hellos received
+// transports/GunJSTransport.ts
+export function createGunJSTransport(options: GunJSTransportOptions): MessageTransport {
+  const gun = Gun({
+    peers: peerList,
+    localStorage: false,
+    radisk: false
+  })
+  
+  // Subscribe to broadcast path
+  gun.get(roomId).get('broadcast').map().on((data, key) => {
+    // Handle incoming broadcast messages
+  })
+  
+  // Subscribe to direct messages path
+  gun.get(roomId).get('direct').get(selfId).map().on((data, key) => {
+    // Handle incoming direct messages
+  })
+  
+  return {
+    connected, selfId,
+    connect, disconnect,
+    broadcast, sendTo,
+    onMessage, onPeerJoin, onPeerLeave
+  }
 }
-
-// On receiving hello:
-- Store the peer's participantId
-- Compare our participantId with peer's to determine initiator
-- If we are initiator, call webrtc.initiateConnection(peerId)
-- If not initiator, wait for offer from peer
 ```
+
+### Configuration
+
+```json
+{
+  "transports": {
+    "gun": {
+      "enabled": true,
+      "peers": [
+        "https://gun-manhattan.herokuapp.com/gun",
+        "https://gun-eu.herokuapp.com/gun"
+      ]
+    }
+  }
+}
+```
+
+If `peers` is not specified, default public Gun peers are used.
+
+### Running Multiple Transports
+
+When both Trystero and GunJS are enabled:
+
+```typescript
+await createTransport({ 
+  roomId, 
+  providers: ['trystero', 'gun']  // Both run in parallel
+})
+```
+
+The `CombinedTransport` merges them:
+- Messages broadcast to BOTH transports
+- Peer discovery merges from BOTH transports
+- If one fails, the other still works
+
+This provides redundancy for better connectivity in restrictive network environments.
 
 ---
 
@@ -815,6 +1059,15 @@ cd server && go build -o videochat .
 
 ## Security Considerations
 
+### Access Model: Link Secrecy
+Rooms are accessed via URL only — no passwords, no accounts. The room ID (UUID) provides the security boundary:
+- 128-bit entropy UUIDs are not guessable
+- Anyone with the link can join — this is by design
+- No server-side access logs or participant history
+- Same model as Google Meet, Zoom personal links, Jitsi
+
+**User-facing warning:** The UI explicitly warns users when generating a link: "Anyone with this link can join your call. There's no password — share only with people you trust."
+
 ### TURN Credentials
 - Short-lived HMAC tokens (30 min default)
 - Scoped to room ID
@@ -874,16 +1127,18 @@ cd server && go build -o videochat .
 | Decision | Why | Confidence |
 |----------|-----|------------|
 | Trystero for P2P signaling | No server required, multiple fallback backends | High |
+| **Layered transport architecture** | Separates signaling protocol from message transport, enabling easy addition of new backends (GunJS, custom relays) | High |
 | P2P mesh (no SFU) | Simplicity, works for small groups | High |
 | Embedded TURN | Single binary, no external dependencies | High |
 | No persistence | Privacy, simplicity | High |
 | Transport factory pattern | Same codebase for both modes | High |
-| BitTorrent as default P2P backend | Most reliable, smallest bundle | Medium |
+| Nostr as default P2P backend | Decentralized, good redundancy, small bundle | Medium |
 
 ---
 
 ## Future Considerations (Not v1)
 
+- **Custom relay transport** — For users who want to run their own relay server without full WebSocket signaling
 - Screen sharing (`navigator.mediaDevices.getDisplayMedia`)
 - E2E encryption for chat messages
 - SFU for 10+ participants

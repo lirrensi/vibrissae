@@ -1,12 +1,9 @@
 import { ref, onUnmounted } from 'vue'
 import { joinRoom, type Room, type ActionSender, type BaseRoomConfig, type RelayConfig, type TurnConfig } from 'trystero'
 import { useLogStore } from '@/stores/log'
-import { useRoomStore } from '@/stores/room'
-import type { SignalingMessage } from '@/types/signaling'
-import type { SignalingTransport } from '@/types/transport'
+import type { TransportMessage, MessageTransport } from '@/types/transport'
 import type { P2PConfig, TransportType } from '@/types/p2p-config'
 
-// Type for Trystero messages (must satisfy DataPayload/JsonValue)
 type SignalPayload = Record<string, string | number | boolean | null>
 
 export interface TrysteroTransportOptions {
@@ -16,393 +13,165 @@ export interface TrysteroTransportOptions {
   onDisconnect?: () => void
 }
 
-// Store for each transport type
 interface TransportEntry {
   room: Room
   send: ActionSender<SignalPayload>
 }
 
-// Map trystero peerId -> our participantId
-type PeerIdMap = Map<string, string>
-
-export function createTrysteroTransport(options: TrysteroTransportOptions): SignalingTransport {
+export function createTrysteroTransport(options: TrysteroTransportOptions): MessageTransport {
   const { roomId, config, onConnect, onDisconnect } = options
-
   const logStore = useLogStore()
-
+  
   const connected = ref(false)
-  const participantId = ref<string | null>(null)
+  const selfId = ref<string>(crypto.randomUUID())
+  
   const activeTransports = new Map<TransportType, TransportEntry>()
-  const messageHandler = ref<((msg: SignalingMessage) => void) | null>(null)
-
-  // For P2P handshake: map trysteroPeerId -> participantId
-  const peerIdMaps = new Map<TransportType, PeerIdMap>()
-
-  // Generate unique participant ID and sync with room store
-  participantId.value = crypto.randomUUID()
-  const roomStore = useRoomStore()
-  roomStore.setParticipantId(participantId.value)
-  logStore.info('signaling', `P2P participantId set`, { participantId: participantId.value.slice(0, 8) })
-
-  let resendTimer: ReturnType<typeof setInterval> | null = null
-  const pendingMessages = new Map<string, { msg: SignalingMessage; attempts: number }>()
-
-  // Build room config based on transport type
+  const onMessageHandler = ref<((msg: TransportMessage, fromPeerId: string) => void) | null>(null)
+  const onPeerJoinHandler = ref<((peerId: string) => void) | null>(null)
+  const onPeerLeaveHandler = ref<((peerId: string) => void) | null>(null)
+  
   function buildRoomConfig(type: TransportType): BaseRoomConfig & RelayConfig & TurnConfig | null {
-    const base: BaseRoomConfig = {
-      appId: 'vibrissae-p2p'
-    }
-
+    const base: BaseRoomConfig = { appId: 'vibrissae-p2p' }
+    
     switch (type) {
-      case 'torrent': {
+      case 'torrent':
         const tc = config.transports.torrent
         if (!tc?.enabled) return null
-        return {
-          ...base,
-          rtcConfig: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }
-        }
-      }
-      case 'nostr': {
+        return { ...base, rtcConfig: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] } }
+      case 'nostr':
         const nc = config.transports.nostr
         if (!nc?.enabled) return null
-        return {
-          ...base,
-          relayUrls: nc.relays ?? []
-        }
-      }
-      case 'mqtt': {
+        return { ...base, relayUrls: nc.relays ?? [] }
+      case 'mqtt':
         const mc = config.transports.mqtt
         if (!mc?.enabled) return null
-        return {
-          ...base,
-          relayUrls: mc.url ? [mc.url] : [
-            'wss://public.mqtthq.com',
-            'wss://broker.hivemq.com',
-            'wss://mqtt.eclipseprojects.io'
-          ]
-        }
-      }
-      case 'ipfs': {
+        return { ...base, relayUrls: mc.url ? [mc.url] : ['wss://public.mqtthq.com', 'wss://broker.hivemq.com', 'wss://mqtt.eclipseprojects.io'] }
+      case 'ipfs':
         const ic = config.transports.ipfs
         if (!ic?.enabled) return null
-        return {
-          ...base,
-          // IPFS uses default bootstrap nodes if not specified
-          ...(ic.bootstrap ? { bootstrap: ic.bootstrap } : {})
-        }
-      }
+        return { ...base, ...(ic.bootstrap ? { bootstrap: ic.bootstrap } : {}) }
       default:
         return null
     }
   }
-
+  
   async function connectTransport(type: TransportType): Promise<boolean> {
     try {
       const roomConfig = buildRoomConfig(type)
       if (!roomConfig) return false
-
+      
       const room = joinRoom(roomConfig as BaseRoomConfig & RelayConfig & TurnConfig, roomId)
-
-      // Initialize peerId map for this transport
-      const peerIdMap = new Map<string, string>()
-      peerIdMaps.set(type, peerIdMap)
-
-      // Handle peer join - send hello with our participantId
+      
+      // Handle peer join
       room.onPeerJoin((trysteroPeerId: string) => {
-        logStore.info('signaling', `Peer discovered via ${type}`, { trysteroPeerId: trysteroPeerId.slice(0, 8) })
-        
-        // Send hello message to exchange participantIds
-        const helloMsg: SignalingMessage = {
-          type: 'hello',
-          from: participantId.value!,
-          payload: { participantId: participantId.value }
-        }
-        
-        const entry = activeTransports.get(type)
-        if (entry) {
-          // Send directly to this peer
-          entry.send(helloMsg as unknown as SignalPayload, trysteroPeerId)
-          logStore.info('signaling', `Sent hello to peer via ${type}`, { trysteroPeerId: trysteroPeerId.slice(0, 8) })
-        }
+        logStore.info('transport', `Peer joined via ${type}`, { trysteroPeerId: trysteroPeerId.slice(0, 8) })
+        onPeerJoinHandler.value?.(trysteroPeerId)
       })
-
+      
+      // Handle peer leave
       room.onPeerLeave((trysteroPeerId: string) => {
-        logStore.info('signaling', `Peer left via ${type}`, { trysteroPeerId: trysteroPeerId.slice(0, 8) })
-        
-        // Look up the participantId for this trystero peer
-        const map = peerIdMaps.get(type)
-        const participantId = map?.get(trysteroPeerId)
-        
-        if (participantId) {
-          // Notify app layer
-          const leaveMsg: SignalingMessage = {
-            type: 'peer-left',
-            from: participantId,
-            payload: { participantId }
-          }
-          messageHandler.value?.(leaveMsg)
-          
-          // Clean up
-          map?.delete(trysteroPeerId)
-        }
+        logStore.info('transport', `Peer left via ${type}`, { trysteroPeerId: trysteroPeerId.slice(0, 8) })
+        onPeerLeaveHandler.value?.(trysteroPeerId)
       })
-
+      
       // Subscribe to messages
       const [send, receive] = room.makeAction<SignalPayload>('signal')
-
+      
       receive((data, trysteroPeerId: string) => {
         if (!data || typeof data !== 'object') return
-
-        const msg = data as unknown as SignalingMessage
-        
-        // Log all incoming messages
-        logStore.info('signaling', `Received ${msg.type} via ${type}`, { 
-          from: msg.from?.slice(0, 8),
-          to: msg.to?.slice(0, 8),
-          trysteroPeer: trysteroPeerId.slice(0, 8)
-        })
-
-        // Skip our own messages (Trystero may broadcast to self in some configs)
-        // Check both 'from' field and participantId in payload
-        const payloadData = msg.payload as Record<string, unknown> | undefined
-        const msgParticipantId = payloadData?.participantId as string | undefined
-        const fromId = msg.from
-        
-        const isFromSelf = msgParticipantId === participantId.value || fromId === participantId.value
-        logStore.info('signaling', `Message check`, { 
-          type: msg.type, 
-          msgParticipantId: msgParticipantId?.slice(0, 8),
-          fromId: fromId?.slice(0, 8),
-          ourId: participantId.value?.slice(0, 8),
-          isFromSelf
-        })
-        if (isFromSelf) {
-          logStore.info('signaling', `FILTERED: message from self`, { 
-            type: msg.type
-          })
-          return
-        }
-
-        // Handle P2P handshake
-        if (msg.type === 'hello') {
-          handleHello(type, trysteroPeerId, msg, peerIdMap)
-          return
-        }
-
-        // For other messages, filter by recipient
-        if (msg.to && msg.to !== participantId.value) {
-          logStore.info('signaling', `Ignoring message not for us`, { 
-            targetTo: msg.to.slice(0, 8), 
-            ourId: participantId.value!.slice(0, 8) 
-          })
-          return
-        }
-
-        // Enrich with from field (look up participantId from map)
-        const map = peerIdMaps.get(type)
-        const fromParticipantId = map?.get(trysteroPeerId) || msg.from
-
-        const enriched: SignalingMessage = {
-          ...msg,
-          from: fromParticipantId
-        }
-
-        messageHandler.value?.(enriched)
+        const msg = data as unknown as TransportMessage
+        onMessageHandler.value?.(msg, trysteroPeerId)
       })
-
+      
       activeTransports.set(type, { room, send })
-
-      // If this is first successful connection
+      
       if (!connected.value) {
         connected.value = true
-        logStore.info('signaling', `P2P transport connected: ${type}`)
+        logStore.info('transport', `Trystero connected: ${type}`)
         onConnect?.()
       }
-
+      
       return true
     } catch (err) {
-      logStore.error('signaling', `P2P transport ${type} failed: ${err}`)
+      logStore.error('transport', `Trystero transport ${type} failed: ${err}`)
       return false
     }
   }
-
-  // Handle hello message - exchange participantIds and determine initiator
-  function handleHello(
-    type: TransportType,
-    trysteroPeerId: string,
-    msg: SignalingMessage,
-    peerIdMap: PeerIdMap
-  ) {
-    logStore.info('signaling', `handleHello called`, {
-      trysteroPeerId: trysteroPeerId.slice(0, 8),
-      msgFrom: msg.from?.slice(0, 8),
-      payload: msg.payload
-    })
+  
+  async function connect(): Promise<void> {
+    logStore.info('transport', 'Connecting Trystero transports...', { transports: config.transports.priority })
     
-    const payload = msg.payload as { participantId: string }
-    const theirParticipantId = payload.participantId
-
-    // Ignore hello messages from ourselves (Trystero may echo our own messages)
-    if (theirParticipantId === participantId.value) {
-      logStore.info('signaling', `Ignoring hello from self`)
-      return
-    }
-    
-    logStore.info('signaling', `Processing hello from peer`, {
-      theirId: theirParticipantId?.slice(0, 8),
-      ourId: participantId.value?.slice(0, 8)
-    })
-
-    if (!theirParticipantId) {
-      logStore.warn('signaling', `Received hello without participantId`)
-      return
-    }
-
-    logStore.info('signaling', `Received hello from peer via ${type}`, { 
-      trysteroPeerId: trysteroPeerId.slice(0, 8),
-      participantId: theirParticipantId.slice(0, 8)
-    })
-
-    // Store the mapping
-    peerIdMap.set(trysteroPeerId, theirParticipantId)
-
-    // Determine initiator: lexicographically smaller participantId initiates
-    const myId = participantId.value!
-    const theirId = theirParticipantId
-    const iAmInitiator = myId < theirId
-    const initiatorId = iAmInitiator ? myId : theirId
-
-    logStore.info('signaling', `Initiator election`, {
-      myId: myId.slice(0, 8),
-      theirId: theirId.slice(0, 8),
-      iAmInitiator,
-      initiatorId: initiatorId.slice(0, 8)
-    })
-
-    // Emit peer-joined to app layer
-    const joinedMsg: SignalingMessage = {
-      type: 'peer-joined',
-      from: theirParticipantId,
-      payload: {
-        participantId: theirParticipantId,
-        initiatorId
-      }
-    }
-    messageHandler.value?.(joinedMsg)
-  }
-
-  function connect() {
-    logStore.info('signaling', 'Connecting P2P transports...', { transports: config.transports.priority })
-
-    // Try all transports in parallel (happy eyeballs)
     const promises = config.transports.priority.map(async (type) => {
       if (isTransportEnabled(type, config)) {
-        const success = await connectTransport(type)
-        logStore.info('signaling', `P2P transport ${type}: ${success ? 'connected' : 'failed'}`)
+        await connectTransport(type)
       }
     })
-
-    Promise.all(promises).then(() => {
-      // Start resend timer for reliable signaling
-      startResendTimer()
-    })
+    
+    await Promise.all(promises)
   }
-
+  
   function disconnect() {
-    if (resendTimer) {
-      clearInterval(resendTimer)
-      resendTimer = null
-    }
-
     activeTransports.forEach(({ room }) => room.leave())
     activeTransports.clear()
-    peerIdMaps.clear()
-
     connected.value = false
-    logStore.info('signaling', 'P2P transports disconnected')
     onDisconnect?.()
   }
-
-  function send(message: SignalingMessage) {
-    // Add from field
-    const enriched: SignalingMessage = {
-      ...message,
-      from: participantId.value!
-    }
-
-    // Log outgoing message
-    logStore.info('signaling', `Sending ${message.type}`, { 
-      to: message.to?.slice(0, 8),
-      from: participantId.value!.slice(0, 8)
-    })
-
-    // Send to all active transports (broadcast - receiver filters by 'to')
+  
+  function broadcast(message: TransportMessage) {
+    const payload = message as unknown as SignalPayload
     activeTransports.forEach(({ send }, type) => {
       try {
-        send(enriched as unknown as SignalPayload)
+        send(payload)
       } catch (err) {
-        logStore.error('signaling', `P2P send failed (${type}): ${err}`)
+        logStore.error('transport', `Broadcast failed (${type}): ${err}`)
       }
     })
-
-    // Track for resend
-    if (message.type === 'offer') {
-      const key = `${message.to}-${message.type}`
-      pendingMessages.set(key, { msg: enriched, attempts: 0 })
-    }
   }
-
-  function onMessage(handler: (msg: SignalingMessage) => void) {
-    messageHandler.value = handler
+  
+  function sendTo(peerId: string, message: TransportMessage) {
+    const payload = message as unknown as SignalPayload
+    activeTransports.forEach(({ send }, type) => {
+      try {
+        send(payload, peerId)
+      } catch (err) {
+        logStore.error('transport', `Send to ${peerId.slice(0, 8)} failed (${type}): ${err}`)
+      }
+    })
   }
-
-  function startResendTimer() {
-    if (resendTimer) return
-
-    resendTimer = setInterval(() => {
-      pendingMessages.forEach((pending, key) => {
-        pending.attempts++
-
-        if (pending.attempts >= config.signaling.resendMaxAttempts) {
-          pendingMessages.delete(key)
-          return
-        }
-
-        // Resend to all transports
-        activeTransports.forEach(({ send }, type) => {
-          try {
-            send(pending.msg as unknown as SignalPayload)
-          } catch (err) {
-            logStore.error('signaling', `P2P resend failed (${type}): ${err}`)
-          }
-        })
-      })
-    }, config.signaling.resendIntervalMs)
+  
+  function onMessage(handler: (msg: TransportMessage, fromPeerId: string) => void) {
+    onMessageHandler.value = handler
   }
-
+  
+  function onPeerJoin(handler: (peerId: string) => void) {
+    onPeerJoinHandler.value = handler
+  }
+  
+  function onPeerLeave(handler: (peerId: string) => void) {
+    onPeerLeaveHandler.value = handler
+  }
+  
   onUnmounted(disconnect)
-
+  
   return {
     connected,
-    participantId,
+    selfId: selfId.value,
     connect,
     disconnect,
-    send,
-    onMessage
+    broadcast,
+    sendTo,
+    onMessage,
+    onPeerJoin,
+    onPeerLeave
   }
 }
 
 function isTransportEnabled(type: TransportType, config: P2PConfig): boolean {
   switch (type) {
-    case 'torrent':
-      return config.transports.torrent?.enabled ?? false
-    case 'nostr':
-      return config.transports.nostr?.enabled ?? false
-    case 'mqtt':
-      return config.transports.mqtt?.enabled ?? false
-    case 'ipfs':
-      return config.transports.ipfs?.enabled ?? false
-    default:
-      return false
+    case 'torrent': return config.transports.torrent?.enabled ?? false
+    case 'nostr': return config.transports.nostr?.enabled ?? false
+    case 'mqtt': return config.transports.mqtt?.enabled ?? false
+    case 'ipfs': return config.transports.ipfs?.enabled ?? false
+    default: return false
   }
 }

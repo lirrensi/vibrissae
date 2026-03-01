@@ -6,6 +6,7 @@ export interface P2PConfig {
     nostr?: NostrConfig
     mqtt?: MQTTConfig
     ipfs?: IPFSConfig
+    gun?: GunConfig
   }
   iceServers?: IceServer[]
   signaling: {
@@ -14,7 +15,7 @@ export interface P2PConfig {
   }
 }
 
-export type TransportType = 'torrent' | 'nostr' | 'mqtt' | 'ipfs'
+export type TransportType = 'torrent' | 'nostr' | 'mqtt' | 'ipfs' | 'gun'
 
 export interface TorrentConfig {
   enabled: boolean
@@ -34,6 +35,11 @@ export interface MQTTConfig {
 export interface IPFSConfig {
   enabled: boolean
   bootstrap?: string[]
+}
+
+export interface GunConfig {
+  enabled: boolean
+  peers?: string[]  // Gun relay peers to connect to
 }
 
 export interface IceServer {

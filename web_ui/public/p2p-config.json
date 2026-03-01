@@ -2,23 +2,21 @@
     "$schema": "./p2p-config.schema.json",
     "version": 1,
     "transports": {
-        "priority": ["torrent", "mqtt", "ipfs", "nostr"],
+        "priority": ["torrent", "mqtt", "ipfs"],
         "torrent": {
             "enabled": true,
             "announce": ["wss://tracker.openwebtorrent.com:443", "wss://tracker.webtorrent.dev:443"]
         },
         "nostr": {
             "enabled": false,
-            "relays": [
-                "wss://relay.damus.io",
-                "wss://nos.lol",
-                "wss://nostr-pub.semisol.dev",
-                "wss://nostr.oxtr.dev",
-                "wss://relay.nostr.info",
-                "wss://nostr.band",
-                "wss://relay.snort.social",
-                "wss://no.str.cr",
-                "wss://nostr.mom"
+            "relays": []
+        },
+        "gun": {
+            "enabled": true,
+            "peers": [
+                "https://gun-manhattan.herokuapp.com/gun",
+                "https://try.axe.eco/gun",
+                "https://test.era.eco/gun"
             ]
         }
     },
