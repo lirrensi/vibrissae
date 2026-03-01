@@ -40,6 +40,12 @@ func (h *SPAHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		path = "index.html"
 	}
 
+	// Special handling for index.html - always serve with config injection
+	if path == "index.html" {
+		h.serveIndexWithConfig(w, r)
+		return
+	}
+
 	// Try to open the file
 	f, err := h.staticFS.Open(path)
 	if err == nil {
